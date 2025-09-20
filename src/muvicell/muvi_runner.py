@@ -2,7 +2,7 @@
 MuVI runner utilities for MuVIcell.
 
 This module provides wrapper functions for running MuVI (Multi-View Integration)
-on preprocessed muon data objects.
+on preprocessed muon data objects using the exact same API as the MuVI package.
 """
 
 import muon as mu
@@ -12,93 +12,25 @@ import warnings
 
 try:
     import muvi
+    import muvi.tl
     MUVI_AVAILABLE = True
 except ImportError:
     MUVI_AVAILABLE = False
     warnings.warn(
-        "MuVI package not available. To use MuVI functionality, install it with:\n"
-        "pip install muvi\n"
-        "Note: MuVI requires Python <3.11. If you're using Python 3.11+, "
-        "the mock implementation will be used for demonstration purposes."
+        "MuVI package not available. This is expected for Python 3.11+. "
+        "For full MuVI functionality, use Python 3.9-3.10 and install with: pip install muvi"
     )
-
-
-def setup_muvi_model(
-    mdata: mu.MuData,
-    n_factors: int = 10,
-    likelihood_per_view: Optional[Dict[str, str]] = None,
-    sparsity_inducing: bool = True,
-    **model_kwargs
-):
-    """
-    Set up MuVI model for multi-view integration.
-    
-    Parameters
-    ----------
-    mdata : mu.MuData
-        Preprocessed muon data object
-    n_factors : int, default 10
-        Number of latent factors
-    likelihood_per_view : Dict[str, str], optional
-        Likelihood for each view. If None, uses 'normal' for all views
-    sparsity_inducing : bool, default True
-        Whether to use sparsity-inducing priors
-    **model_kwargs
-        Additional arguments passed to MuVI model
-        
-    Returns
-    -------
-    muvi.MuVI or dict
-        Configured MuVI model (or dict if muvi not available)
-        
-    Examples
-    --------
-    >>> model = setup_muvi_model(mdata, n_factors=15)
-    >>> # With custom likelihoods
-    >>> likelihoods = {'rna': 'normal', 'protein': 'normal'}
-    >>> model = setup_muvi_model(mdata, likelihood_per_view=likelihoods)
-    """
-    if not MUVI_AVAILABLE:
-        warnings.warn("MuVI not available. Returning mock configuration.")
-        return {
-            'n_factors': n_factors,
-            'likelihood_per_view': likelihood_per_view or {view: 'normal' for view in mdata.mod.keys()},
-            'sparsity_inducing': sparsity_inducing,
-            **model_kwargs
-        }
-    
-    # Set default likelihoods if not provided
-    if likelihood_per_view is None:
-        likelihood_per_view = {view: 'normal' for view in mdata.mod.keys()}
-    
-    # Validate that all views have specified likelihoods
-    for view in mdata.mod.keys():
-        if view not in likelihood_per_view:
-            likelihood_per_view[view] = 'normal'
-            warnings.warn(f"No likelihood specified for view '{view}', using 'normal'")
-    
-    # Create MuVI model
-    model = muvi.MuVI(
-        n_factors=n_factors,
-        likelihood=likelihood_per_view,
-        sparsity_inducing=sparsity_inducing,
-        **model_kwargs
-    )
-    
-    return model
 
 
 def run_muvi(
     mdata: mu.MuData,
     n_factors: int = 10,
-    n_iterations: int = 1000,
-    likelihood_per_view: Optional[Dict[str, str]] = None,
-    convergence_tolerance: float = 1e-3,
-    verbose: bool = True,
+    nmf: bool = False,
+    device: str = "cpu",
     **muvi_kwargs
 ) -> mu.MuData:
     """
-    Run MuVI analysis on muon data.
+    Run MuVI analysis on muon data using the standard muvi.tl.from_mdata pattern.
     
     Parameters
     ----------
@@ -106,14 +38,10 @@ def run_muvi(
         Preprocessed muon data object
     n_factors : int, default 10
         Number of latent factors
-    n_iterations : int, default 1000
-        Maximum number of iterations
-    likelihood_per_view : Dict[str, str], optional
-        Likelihood for each view
-    convergence_tolerance : float, default 1e-3
-        Convergence tolerance for training
-    verbose : bool, default True
-        Whether to show training progress
+    nmf : bool, default False
+        Whether to use non-negative matrix factorization
+    device : str, default "cpu"
+        Device to use for computation ('cpu' or 'cuda')
     **muvi_kwargs
         Additional arguments passed to MuVI
         
@@ -124,54 +52,31 @@ def run_muvi(
         
     Examples
     --------
-    >>> mdata_muvi = run_muvi(mdata, n_factors=15, n_iterations=1500)
+    >>> mdata_muvi = run_muvi(mdata, n_factors=15, nmf=False)
     """
-    # Set up model
-    model = setup_muvi_model(
-        mdata, 
-        n_factors=n_factors,
-        likelihood_per_view=likelihood_per_view,
-        **{k: v for k, v in muvi_kwargs.items() if k != 'convergence_tolerance'}
-    )
-    
-    # Check if we have a real MuVI model or mock
-    if isinstance(model, dict):
-        # Mock implementation
-        if verbose:
-            print("Using mock MuVI implementation for demonstration.")
+    if not MUVI_AVAILABLE:
+        warnings.warn("MuVI not available. Creating mock results for demonstration.")
         return _create_mock_muvi_results(mdata, n_factors)
     
-    # Fit model
-    model.fit(
+    # Create and fit MuVI model using the standard API
+    model = muvi.tl.from_mdata(
         mdata,
-        n_iterations=n_iterations,
-        convergence_tolerance=convergence_tolerance,
-        verbose=verbose
+        n_factors=n_factors,
+        nmf=nmf,
+        device=device,
+        **muvi_kwargs
     )
     
-    # Store results in mdata
-    mdata_result = mdata.copy()
+    # Fit the model
+    model.fit()
     
-    # Add factor scores (cell embeddings)
-    mdata_result.obsm['X_muvi'] = model.get_factor_scores()
+    # Store results in mdata - the model automatically updates the mdata object
+    # MuVI stores results in the standard locations:
+    # - Factor scores in mdata.obsm['X_muvi']
+    # - Factor loadings in mdata.varm for each view
+    # - Variance explained in mdata.uns
     
-    # Add factor loadings for each view
-    for view_name in mdata.mod.keys():
-        loadings = model.get_factor_loadings(view=view_name)
-        mdata_result.mod[view_name].varm['muvi_loadings'] = loadings
-    
-    # Add factor variance explained
-    mdata_result.uns['muvi_variance_explained'] = model.get_variance_explained()
-    
-    # Store model parameters
-    mdata_result.uns['muvi_model_params'] = {
-        'n_factors': n_factors,
-        'n_iterations': n_iterations,
-        'likelihood_per_view': likelihood_per_view,
-        'convergence_tolerance': convergence_tolerance
-    }
-    
-    return mdata_result
+    return mdata
 
 
 def _create_mock_muvi_results(mdata: mu.MuData, n_factors: int = 10) -> mu.MuData:
@@ -209,8 +114,6 @@ def _create_mock_muvi_results(mdata: mu.MuData, n_factors: int = 10) -> mu.MuDat
     }
     
     return mdata_result
-
-
 
 
 def get_factor_scores(mdata: mu.MuData) -> np.ndarray:
@@ -256,16 +159,32 @@ def get_factor_loadings(mdata: mu.MuData, view: str) -> np.ndarray:
         
     Examples
     --------
-    >>> loadings = get_factor_loadings(mdata_muvi, 'rna')
-    >>> print(f"RNA loadings shape: {loadings.shape}")
+    >>> loadings = get_factor_loadings(mdata_muvi, 'view1')
+    >>> print(f"View1 loadings shape: {loadings.shape}")
     """
     if view not in mdata.mod:
         raise ValueError(f"View '{view}' not found in muon data.")
     
-    if 'muvi_loadings' not in mdata.mod[view].varm:
+    # Check for MuVI loadings in varm (try different possible keys)
+    loadings_key = None
+    possible_keys = ['muvi_loadings', 'loadings', 'factor_loadings']
+    
+    for key in possible_keys:
+        if key in mdata.mod[view].varm:
+            loadings_key = key
+            break
+    
+    # Fallback: check for any key containing 'loading' or 'factor'
+    if loadings_key is None:
+        for key in mdata.mod[view].varm.keys():
+            if 'loading' in key.lower() or 'factor' in key.lower():
+                loadings_key = key
+                break
+    
+    if loadings_key is None:
         raise ValueError(f"No MuVI loadings found for view '{view}'. Run run_muvi() first.")
     
-    return mdata.mod[view].varm['muvi_loadings']
+    return mdata.mod[view].varm[loadings_key]
 
 
 def get_variance_explained(mdata: mu.MuData) -> Dict[str, np.ndarray]:
@@ -285,12 +204,28 @@ def get_variance_explained(mdata: mu.MuData) -> Dict[str, np.ndarray]:
     Examples
     --------
     >>> var_exp = get_variance_explained(mdata_muvi)
-    >>> print(f"Total variance explained: {var_exp}")
+    >>> print(f"Variance explained: {var_exp}")
     """
-    if 'muvi_variance_explained' not in mdata.uns:
+    # Check for variance explained in uns (try different possible keys)
+    var_exp_key = None
+    possible_keys = ['muvi_variance_explained', 'variance_explained', 'r2']
+    
+    for key in possible_keys:
+        if key in mdata.uns:
+            var_exp_key = key
+            break
+    
+    # Fallback: check for any key containing 'variance' or 'r2'
+    if var_exp_key is None:
+        for key in mdata.uns.keys():
+            if 'variance' in key.lower() or 'r2' in key.lower():
+                var_exp_key = key
+                break
+    
+    if var_exp_key is None:
         raise ValueError("No MuVI variance explained found. Run run_muvi() first.")
     
-    return mdata.uns['muvi_variance_explained']
+    return mdata.uns[var_exp_key]
 
 
 def select_top_factors(

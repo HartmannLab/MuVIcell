@@ -16,17 +16,29 @@ MuVIcell is a Python package for multi-view integration and analysis of single-c
 
 ## Installation
 
-MuVIcell uses `uv` for dependency management. To install:
+### Requirements
 
+**Important**: MuVI requires Python 3.9-3.10. Python 3.11+ is not currently supported by MuVI.
+
+For the full MuVI functionality:
 ```bash
-# Clone the repository
+# Create a Python 3.10 environment
+conda create -n muvicell python=3.10
+conda activate muvicell
+
+# Clone and install
+git clone https://github.com/HartmannLab/MuVIcell.git
+cd MuVIcell
+pip install -e .[muvi]
+```
+
+For development without MuVI (Python 3.11+ compatible):
+```bash
+# Clone the repository  
 git clone https://github.com/HartmannLab/MuVIcell.git
 cd MuVIcell
 
-# Install with uv (recommended)
-uv sync
-
-# Or install with pip
+# Install without MuVI (will use mock implementation)
 pip install -e .
 ```
 
@@ -34,17 +46,18 @@ pip install -e .
 
 Core dependencies:
 - `muon` - Multi-modal omics data handling
-- `muvi` - Multi-view integration
-- `liana` - Ligand-receptor analysis
 - `plotnine` - Grammar of graphics visualization
 - `scanpy` - Single-cell analysis
 - `pandas`, `numpy`, `scipy` - Data manipulation and analysis
+
+Optional dependencies:
+- `muvi` - Multi-view integration (requires Python 3.9-3.10)
 
 ## Quick Start
 
 ```python
 import numpy as np
-from MuVIcell import synthetic, preprocessing, muvi_runner, analysis, visualization
+from muvicell import synthetic, preprocessing, muvi_runner, analysis, visualization
 
 # 1. Generate synthetic multi-view data
 mdata = synthetic.generate_synthetic_data(
@@ -77,8 +90,8 @@ See the [MuVIcell Tutorial](notebooks/MuVIcell_Tutorial.ipynb) Jupyter notebook 
 ## Package Structure
 
 ```
-MuVIcell/
-├── src/MuVIcell/
+muvicell/
+├── src/muvicell/
 │   ├── data.py              # Data loading and validation
 │   ├── preprocessing.py     # Data preprocessing utilities
 │   ├── muvi_runner.py      # MuVI wrapper functions
