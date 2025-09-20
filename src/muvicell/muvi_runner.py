@@ -6,10 +6,21 @@ on preprocessed muon data objects.
 """
 
 import muon as mu
-# import muvi  # Commented out since muvi might not be available in all environments
 import numpy as np
 from typing import Optional, Dict, List, Union, Any
 import warnings
+
+try:
+    import muvi
+    MUVI_AVAILABLE = True
+except ImportError:
+    MUVI_AVAILABLE = False
+    warnings.warn(
+        "MuVI package not available. To use MuVI functionality, install it with:\n"
+        "pip install muvi\n"
+        "Note: MuVI requires Python <3.11. If you're using Python 3.11+, "
+        "the mock implementation will be used for demonstration purposes."
+    )
 
 
 def setup_muvi_model(
@@ -47,38 +58,34 @@ def setup_muvi_model(
     >>> likelihoods = {'rna': 'normal', 'protein': 'normal'}
     >>> model = setup_muvi_model(mdata, likelihood_per_view=likelihoods)
     """
-    try:
-        import muvi
-        
-        # Set default likelihoods if not provided
-        if likelihood_per_view is None:
-            likelihood_per_view = {view: 'normal' for view in mdata.mod.keys()}
-        
-        # Validate that all views have specified likelihoods
-        for view in mdata.mod.keys():
-            if view not in likelihood_per_view:
-                likelihood_per_view[view] = 'normal'
-                warnings.warn(f"No likelihood specified for view '{view}', using 'normal'")
-        
-        # Create MuVI model
-        model = muvi.MuVI(
-            n_factors=n_factors,
-            likelihood=likelihood_per_view,
-            sparsity_inducing=sparsity_inducing,
-            **model_kwargs
-        )
-        
-        return model
-    
-    except ImportError:
-        warnings.warn("MuVI package not available. Returning mock model configuration.")
-        # Return mock configuration for testing
+    if not MUVI_AVAILABLE:
+        warnings.warn("MuVI not available. Returning mock configuration.")
         return {
             'n_factors': n_factors,
             'likelihood_per_view': likelihood_per_view or {view: 'normal' for view in mdata.mod.keys()},
             'sparsity_inducing': sparsity_inducing,
             **model_kwargs
         }
+    
+    # Set default likelihoods if not provided
+    if likelihood_per_view is None:
+        likelihood_per_view = {view: 'normal' for view in mdata.mod.keys()}
+    
+    # Validate that all views have specified likelihoods
+    for view in mdata.mod.keys():
+        if view not in likelihood_per_view:
+            likelihood_per_view[view] = 'normal'
+            warnings.warn(f"No likelihood specified for view '{view}', using 'normal'")
+    
+    # Create MuVI model
+    model = muvi.MuVI(
+        n_factors=n_factors,
+        likelihood=likelihood_per_view,
+        sparsity_inducing=sparsity_inducing,
+        **model_kwargs
+    )
+    
+    return model
 
 
 def run_muvi(
@@ -119,62 +126,56 @@ def run_muvi(
     --------
     >>> mdata_muvi = run_muvi(mdata, n_factors=15, n_iterations=1500)
     """
-    try:
-        import muvi
-        
-        # Set up model
-        model = setup_muvi_model(
-            mdata, 
-            n_factors=n_factors,
-            likelihood_per_view=likelihood_per_view,
-            **{k: v for k, v in muvi_kwargs.items() if k != 'convergence_tolerance'}
-        )
-        
-        # Check if we have a real MuVI model or mock
-        if isinstance(model, dict):
-            # Mock implementation
-            warnings.warn("Using mock MuVI implementation for testing.")
-            return _create_mock_muvi_results(mdata, n_factors)
-        
-        # Fit model
-        model.fit(
-            mdata,
-            n_iterations=n_iterations,
-            convergence_tolerance=convergence_tolerance,
-            verbose=verbose
-        )
-        
-        # Store results in mdata
-        mdata_result = mdata.copy()
-        
-        # Add factor scores (cell embeddings)
-        mdata_result.obsm['X_muvi'] = model.get_factor_scores()
-        
-        # Add factor loadings for each view
-        for view_name in mdata.mod.keys():
-            loadings = model.get_factor_loadings(view=view_name)
-            mdata_result.mod[view_name].varm['muvi_loadings'] = loadings
-        
-        # Add factor variance explained
-        mdata_result.uns['muvi_variance_explained'] = model.get_variance_explained()
-        
-        # Store model parameters
-        mdata_result.uns['muvi_model_params'] = {
-            'n_factors': n_factors,
-            'n_iterations': n_iterations,
-            'likelihood_per_view': likelihood_per_view,
-            'convergence_tolerance': convergence_tolerance
-        }
-        
-        return mdata_result
-        
-    except ImportError:
-        warnings.warn("MuVI package not available. Creating mock results for testing.")
+    # Set up model
+    model = setup_muvi_model(
+        mdata, 
+        n_factors=n_factors,
+        likelihood_per_view=likelihood_per_view,
+        **{k: v for k, v in muvi_kwargs.items() if k != 'convergence_tolerance'}
+    )
+    
+    # Check if we have a real MuVI model or mock
+    if isinstance(model, dict):
+        # Mock implementation
+        if verbose:
+            print("Using mock MuVI implementation for demonstration.")
         return _create_mock_muvi_results(mdata, n_factors)
+    
+    # Fit model
+    model.fit(
+        mdata,
+        n_iterations=n_iterations,
+        convergence_tolerance=convergence_tolerance,
+        verbose=verbose
+    )
+    
+    # Store results in mdata
+    mdata_result = mdata.copy()
+    
+    # Add factor scores (cell embeddings)
+    mdata_result.obsm['X_muvi'] = model.get_factor_scores()
+    
+    # Add factor loadings for each view
+    for view_name in mdata.mod.keys():
+        loadings = model.get_factor_loadings(view=view_name)
+        mdata_result.mod[view_name].varm['muvi_loadings'] = loadings
+    
+    # Add factor variance explained
+    mdata_result.uns['muvi_variance_explained'] = model.get_variance_explained()
+    
+    # Store model parameters
+    mdata_result.uns['muvi_model_params'] = {
+        'n_factors': n_factors,
+        'n_iterations': n_iterations,
+        'likelihood_per_view': likelihood_per_view,
+        'convergence_tolerance': convergence_tolerance
+    }
+    
+    return mdata_result
 
 
 def _create_mock_muvi_results(mdata: mu.MuData, n_factors: int = 10) -> mu.MuData:
-    """Create mock MuVI results for testing when MuVI is not available."""
+    """Create mock MuVI results for demonstration when MuVI is not available."""
     mdata_result = mdata.copy()
     n_cells = mdata.n_obs
     
@@ -208,6 +209,8 @@ def _create_mock_muvi_results(mdata: mu.MuData, n_factors: int = 10) -> mu.MuDat
     }
     
     return mdata_result
+
+
 
 
 def get_factor_scores(mdata: mu.MuData) -> np.ndarray:

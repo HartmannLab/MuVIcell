@@ -166,11 +166,30 @@ def find_highly_variable_genes(
             n_genes = n_top_genes
         
         # Find highly variable genes
-        sc.pp.highly_variable_genes(
-            view_data,
-            n_top_genes=n_genes,
-            subset=False  # Don't subset yet, just mark
-        )
+        try:
+            sc.pp.highly_variable_genes(
+                view_data,
+                n_top_genes=min(n_genes, view_data.n_vars),
+                subset=False  # Don't subset yet, just mark
+            )
+        except (ValueError, Exception) as e:
+            # Handle edge cases with small datasets or insufficient variance
+            warnings.warn(
+                f"Could not find highly variable genes for view '{view_name}': {str(e)}. "
+                f"Marking top {min(n_genes, view_data.n_vars)} genes as highly variable."
+            )
+            # Manually mark top genes as highly variable based on variance
+            if view_data.n_vars > 0:
+                X = view_data.X.toarray() if hasattr(view_data.X, 'toarray') else view_data.X
+                gene_vars = np.var(X, axis=0)
+                n_select = min(n_genes, view_data.n_vars)
+                top_indices = np.argsort(gene_vars)[::-1][:n_select]
+                
+                view_data.var['highly_variable'] = False
+                view_data.var.iloc[top_indices, view_data.var.columns.get_loc('highly_variable')] = True
+                view_data.var['means'] = np.mean(X, axis=0)
+                view_data.var['dispersions'] = gene_vars
+                view_data.var['dispersions_norm'] = gene_vars / np.mean(gene_vars) if np.mean(gene_vars) > 0 else gene_vars
     
     return mdata_hvg
 
