@@ -82,7 +82,7 @@ def get_view_info(mdata: mu.MuData) -> pd.DataFrame:
     return pd.DataFrame(view_info)
 
 
-def validate_muon_data(mdata: mu.MuData) -> Dict[str, bool]:
+def validate_for_muvi(mdata: mu.MuData) -> Dict[str, bool]:
     """
     Validate muon data object for MuVI analysis.
     

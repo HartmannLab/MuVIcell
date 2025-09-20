@@ -189,7 +189,7 @@ def _generate_view_data(
     return expression_data
 
 
-def add_realistic_structure(
+def add_latent_structure(
     mdata: mu.MuData,
     n_latent_factors: int = 5,
     factor_variance: List[float] = None

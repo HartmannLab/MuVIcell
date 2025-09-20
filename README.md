@@ -2,7 +2,9 @@
 
 **From cell-type stratified features to multicellular coordinated programs**
 
-MuVIcell is a Python package for multi-view integration and analysis of single-cell data using MuVI (Multi-View Integration). It provides a streamlined workflow for analyzing multi-modal single-cell datasets, identifying latent factors that capture coordinated programs across different molecular layers.
+MuVIcell is a Python package for multi-view integration and analysis of single-cell data using MuVI (Multi-View Integration). It provides a streamlined workflow for analyzing multi-modal datasets, identifying latent factors that capture coordinated programs across different molecular layers.
+
+**Note**: In the context of MuVIcell, each row in the muon object represents a sample (not individual cells), and the views typically contain cell type aggregated data per sample.
 
 ## Features
 
@@ -232,6 +234,8 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 ## Acknowledgments
 
 - [MuVI](https://github.com/gtca/muvi) for multi-view integration methodology
+- [LIANA+](https://github.com/saezlab/liana-py) for handling and interpreting factors in multi-cellular contexts
+- [MOFAcell](https://github.com/saezlab/MOFAcell) as conceptual inspiration for multicellular factor analysis
 - [muon](https://github.com/scverse/muon) for multi-modal data handling
 - [scanpy](https://github.com/scverse/scanpy) for single-cell analysis tools
 - [plotnine](https://github.com/has2k1/plotnine) for grammar of graphics visualization
