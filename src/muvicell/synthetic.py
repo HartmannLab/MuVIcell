@@ -268,6 +268,19 @@ def add_latent_structure(
     mdata_structured.obsm['true_factors'] = latent_factors
     mdata_structured.uns['true_factor_variance'] = factor_variance
     
+    # Add shared metadata columns for easier access
+    # Extract from the first view (without prefixes)
+    first_view = list(mdata_structured.mod.keys())[0]
+    first_view_obs = mdata_structured.mod[first_view].obs
+    
+    # Add shared metadata columns to the main obs
+    if 'cell_type' in first_view_obs.columns:
+        mdata_structured.obs['cell_type'] = first_view_obs['cell_type'].values
+    if 'condition' in first_view_obs.columns:
+        mdata_structured.obs['condition'] = first_view_obs['condition'].values
+    if 'batch' in first_view_obs.columns:
+        mdata_structured.obs['batch'] = first_view_obs['batch'].values
+    
     return mdata_structured
 
 
