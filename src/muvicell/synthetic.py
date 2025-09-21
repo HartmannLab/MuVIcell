@@ -17,6 +17,7 @@ import warnings
 def generate_synthetic_data(
     n_samples: int = 200,
     view_configs: Optional[Dict[str, Dict]] = None,
+    n_true_factors: int = 3,
     random_state: int = 42
 ) -> mu.MuData:
     """
@@ -29,6 +30,8 @@ def generate_synthetic_data(
     view_configs : Dict[str, Dict], optional
         Configuration for each view. If None, creates default 3 views
         with 5, 10, and 15 features respectively
+    n_true_factors : int, default 3
+        Number of true latent factors to simulate (should match MuVI n_factors)
     random_state : int, default 42
         Random state for reproducibility
         

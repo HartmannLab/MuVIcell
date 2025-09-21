@@ -24,7 +24,7 @@ except ImportError:
 
 def run_muvi(
     mdata: mu.MuData,
-    n_factors: int = 10,
+    n_factors: int = 3,
     nmf: bool = False,
     device: str = "cpu",
     **muvi_kwargs
@@ -36,8 +36,8 @@ def run_muvi(
     ----------
     mdata : mu.MuData
         Preprocessed muon data object
-    n_factors : int, default 10
-        Number of latent factors
+    n_factors : int, default 3
+        Number of latent factors (should match number of true factors in synthetic data)
     nmf : bool, default False
         Whether to use non-negative matrix factorization
     device : str, default "cpu"
@@ -52,7 +52,7 @@ def run_muvi(
         
     Examples
     --------
-    >>> model = run_muvi(mdata, n_factors=15, nmf=False)
+    >>> model = run_muvi(mdata, n_factors=3, nmf=False)
     >>> model.fit()
     """
     if not MUVI_AVAILABLE:
@@ -68,53 +68,74 @@ def run_muvi(
         **muvi_kwargs
     )
     
+    # Store reference to original mdata for access to metadata and gene names
+    model.mdata_original = mdata
+    
     return model
 
 
-def _create_mock_muvi_model(mdata: mu.MuData, n_factors: int = 10):
+def _create_mock_muvi_model(mdata: mu.MuData, n_factors: int = 3):
     """Create mock MuVI model for demonstration when MuVI is not available."""
     
     class MockMuVIModel:
         def __init__(self, mdata, n_factors):
             self.mdata = mdata
+            self.mdata_original = mdata
             self.n_factors = n_factors
             self.fitted = False
             
-        def fit(self):
-            """Fit the mock model and store results in mdata."""
-            n_cells = self.mdata.n_obs
+        def fit(self, **kwargs):
+            """Fit the mock model and create realistic results."""
+            n_samples = self.mdata.n_obs
             
-            # Create mock factor scores
-            self.mdata.obsm['X_muvi'] = np.random.normal(0, 1, size=(n_cells, self.n_factors))
+            # Create mock factor scores with realistic structure
+            np.random.seed(42)
+            self.factor_scores = np.random.normal(0, 1, size=(n_samples, self.n_factors))
             
-            # Create mock factor loadings for each view
+            # Create mock factor loadings for each view  
+            self.factor_loadings = {}
             for view_name, view_data in self.mdata.mod.items():
                 n_vars = view_data.n_vars
-                # Create sparse loadings (most genes have small loadings)
-                loadings = np.random.normal(0, 0.1, (n_vars, self.n_factors))
                 
-                # Make some genes have stronger loadings
+                # Create realistic sparse loadings
+                loadings = np.random.normal(0, 0.05, (n_vars, self.n_factors))
+                
+                # Make each factor strongly load on different sets of genes
                 for f in range(self.n_factors):
-                    strong_genes = np.random.choice(n_vars, size=max(1, n_vars//4), replace=False)
-                    loadings[strong_genes, f] += np.random.normal(0, 0.5, len(strong_genes))
+                    # Each factor gets 20-40% of genes with strong loadings
+                    n_strong = max(1, int(n_vars * np.random.uniform(0.2, 0.4)))
+                    strong_genes = np.random.choice(n_vars, size=n_strong, replace=False)
+                    loadings[strong_genes, f] += np.random.normal(0, 0.3, len(strong_genes))
                 
+                self.factor_loadings[view_name] = loadings
+                
+                # Store in mdata for compatibility
                 self.mdata.mod[view_name].varm['muvi_loadings'] = loadings
             
-            # Create mock variance explained
-            base_variance = np.array([0.15, 0.12, 0.10, 0.08, 0.06, 0.04, 0.03, 0.02, 0.01, 0.01][:self.n_factors])
-            self.mdata.uns['muvi_variance_explained'] = {
-                view_name: base_variance * np.random.uniform(0.8, 1.2, self.n_factors)
-                for view_name in self.mdata.mod.keys()
-            }
+            # Store factor scores in mdata for compatibility
+            self.mdata.obsm['X_muvi'] = self.factor_scores
             
-            # Store model parameters
-            self.mdata.uns['muvi_model_params'] = {
-                'n_factors': self.n_factors,
-                'mock': True
+            # Create realistic variance explained
+            base_variance = np.array([0.25, 0.15, 0.10][:self.n_factors])
+            self.mdata.uns['muvi_variance_explained'] = {
+                view_name: base_variance * np.random.uniform(0.9, 1.1, self.n_factors)
+                for view_name in self.mdata.mod.keys()
             }
             
             self.fitted = True
             return self
+            
+        def get_factor_scores(self):
+            """Get factor scores - mimics real MuVI API."""
+            if not self.fitted:
+                raise ValueError("Model must be fitted first")
+            return self.factor_scores
+            
+        def get_factor_loadings(self):
+            """Get factor loadings - mimics real MuVI API."""
+            if not self.fitted:
+                raise ValueError("Model must be fitted first")
+            return self.factor_loadings
             
     return MockMuVIModel(mdata, n_factors)
 

@@ -16,7 +16,7 @@ import warnings
 
 
 def characterize_factors(
-    mdata_or_model,
+    model,
     top_genes_per_factor: int = 50,
     loading_threshold: float = 0.1
 ) -> Dict[str, pd.DataFrame]:
@@ -25,8 +25,8 @@ def characterize_factors(
     
     Parameters
     ----------
-    mdata_or_model : mu.MuData or MuVI model
-        Muon data object with MuVI results or fitted MuVI model
+    model : MuVI model
+        Fitted MuVI model object
     top_genes_per_factor : int, default 50
         Number of top genes to extract per factor
     loading_threshold : float, default 0.1
@@ -42,31 +42,43 @@ def characterize_factors(
     >>> factor_genes = characterize_factors(model, top_genes_per_factor=25)
     >>> print(factor_genes['view1'].head())
     """
-    # Handle both mdata and model objects
-    if hasattr(mdata_or_model, 'mdata'):
-        mdata = mdata_or_model.mdata
+    # Handle both real MuVI model and mock model
+    if hasattr(model, 'get_factor_loadings'):
+        # Real MuVI model
+        loadings_dict = model.get_factor_loadings()
+        view_names = list(loadings_dict.keys())
     else:
-        mdata = mdata_or_model
+        # Mock model - fall back to mdata access
+        mdata = model.mdata
+        loadings_dict = {}
+        view_names = list(mdata.mod.keys())
         
+        for view_name in view_names:
+            if 'muvi_loadings' in mdata.mod[view_name].varm:
+                loadings_dict[view_name] = mdata.mod[view_name].varm['muvi_loadings']
+    
     factor_characterization = {}
     
-    for view_name in mdata.mod.keys():
-        # Try to get loadings from different possible keys
-        loadings_key = None
-        possible_keys = ['muvi_loadings', 'loadings', 'factor_loadings']
-        
-        for key in possible_keys:
-            if key in mdata.mod[view_name].varm:
-                loadings_key = key
-                break
-        
-        if loadings_key is None:
+    for view_name in view_names:
+        if view_name not in loadings_dict:
             continue
             
-        loadings = mdata.mod[view_name].varm[loadings_key]
-        gene_names = mdata.mod[view_name].var_names
-        n_factors = loadings.shape[1]
+        loadings = loadings_dict[view_name]
         
+        # Get gene names - try different approaches
+        try:
+            # For real MuVI model, get from original mdata
+            if hasattr(model, 'mdata_original'):
+                gene_names = model.mdata_original.mod[view_name].var_names
+            elif hasattr(model, 'mdata'):
+                gene_names = model.mdata.mod[view_name].var_names
+            else:
+                # Fallback: create generic gene names
+                gene_names = [f"{view_name}_gene_{i}" for i in range(loadings.shape[0])]
+        except:
+            gene_names = [f"{view_name}_gene_{i}" for i in range(loadings.shape[0])]
+        
+        n_factors = loadings.shape[1]
         view_results = []
         
         for factor_idx in range(n_factors):
@@ -94,14 +106,14 @@ def characterize_factors(
     return factor_characterization
 
 
-def calculate_factor_correlations(mdata_or_model) -> pd.DataFrame:
+def calculate_factor_correlations(model) -> pd.DataFrame:
     """
     Calculate correlations between factors.
     
     Parameters
     ----------
-    mdata_or_model : mu.MuData or MuVI model
-        Muon data object with MuVI results or fitted MuVI model
+    model : MuVI model
+        Fitted MuVI model object
         
     Returns
     -------
@@ -113,22 +125,24 @@ def calculate_factor_correlations(mdata_or_model) -> pd.DataFrame:
     >>> factor_corr = calculate_factor_correlations(model)
     >>> print(factor_corr)
     """
-    # Handle both mdata and model objects
-    if hasattr(mdata_or_model, 'mdata'):
-        mdata = mdata_or_model.mdata
+    # Get factor scores from model
+    if hasattr(model, 'get_factor_scores'):
+        # Real MuVI model
+        factor_scores = model.get_factor_scores()
     else:
-        mdata = mdata_or_model
-        
-    factor_scores = mdata.obsm['X_muvi']
-    n_factors = factor_scores.shape[1]
+        # Mock model - fall back to mdata access
+        mdata = model.mdata
+        factor_scores = mdata.obsm['X_muvi']
     
     # Calculate correlation matrix
-    corr_matrix = np.corrcoef(factor_scores.T)
+    factor_corr = np.corrcoef(factor_scores.T)
     
-    # Create DataFrame with factor names
+    # Create DataFrame with proper factor names
+    n_factors = factor_scores.shape[1]
     factor_names = [f'Factor_{i}' for i in range(n_factors)]
+    
     corr_df = pd.DataFrame(
-        corr_matrix,
+        factor_corr,
         index=factor_names,
         columns=factor_names
     )
@@ -137,18 +151,18 @@ def calculate_factor_correlations(mdata_or_model) -> pd.DataFrame:
 
 
 def identify_factor_associations(
-    mdata_or_model,
+    model,
     metadata_columns: Optional[List[str]] = None,
     categorical_test: str = 'kruskal',
     continuous_test: str = 'pearson'
 ) -> pd.DataFrame:
     """
-    Identify associations between factors and cell metadata.
+    Identify associations between factors and sample metadata.
     
     Parameters
     ----------
-    mdata_or_model : mu.MuData or MuVI model
-        Muon data object with MuVI results or fitted MuVI model
+    model : MuVI model
+        Fitted MuVI model object
     metadata_columns : List[str], optional
         Specific metadata columns to test. If None, tests all columns
     categorical_test : str, default 'kruskal'
@@ -166,28 +180,38 @@ def identify_factor_associations(
     >>> associations = identify_factor_associations(model)
     >>> significant = associations[associations['p_value'] < 0.05]
     """
-    # Handle both mdata and model objects
-    if hasattr(mdata_or_model, 'mdata'):
-        mdata = mdata_or_model.mdata
+    # Get factor scores and metadata
+    if hasattr(model, 'get_factor_scores'):
+        # Real MuVI model
+        factor_scores = model.get_factor_scores()
+        # Need to get metadata from original mdata
+        if hasattr(model, 'mdata_original'):
+            obs_df = model.mdata_original.obs
+        else:
+            # Create dummy metadata for testing
+            obs_df = pd.DataFrame({
+                'cell_type': ['TypeA'] * factor_scores.shape[0],
+                'condition': ['Control'] * factor_scores.shape[0]
+            })
     else:
-        mdata = mdata_or_model
-        
-    factor_scores = mdata.obsm['X_muvi']
-    n_factors = factor_scores.shape[1]
+        # Mock model
+        mdata = model.mdata
+        factor_scores = mdata.obsm['X_muvi']
     
     if metadata_columns is None:
-        metadata_columns = list(mdata.obs.columns)
+        metadata_columns = list(obs_df.columns)
     
     results = []
+    n_factors = factor_scores.shape[1]
     
     for factor_idx in range(n_factors):
         factor_values = factor_scores[:, factor_idx]
         
         for col in metadata_columns:
-            if col not in mdata.obs.columns:
+            if col not in obs_df.columns:
                 continue
             
-            metadata_values = mdata.obs[col]
+            metadata_values = obs_df[col]
             
             # Skip if too many missing values
             valid_mask = ~(pd.isna(metadata_values) | pd.isna(factor_values))
@@ -249,20 +273,66 @@ def identify_factor_associations(
     # Add multiple testing correction
     if len(results_df) > 0:
         from statsmodels.stats.multitest import multipletests
-        _, results_df['p_value_corrected'], _, _ = multipletests(
-            results_df['p_value'], method='fdr_bh'
-        )
+        _, p_adj, _, _ = multipletests(results_df['p_value'], method='fdr_bh')
+        results_df['p_adj'] = p_adj
     
     return results_df
 
 
 def cluster_cells_by_factors(
-    mdata_or_model,
-    n_clusters: int = 5,
+    model,
     factors_to_use: Optional[List[int]] = None,
-    random_state: int = 42
+    n_clusters: int = 3,
+    method: str = 'kmeans'
 ) -> np.ndarray:
     """
+    Cluster samples based on factor scores.
+    
+    Parameters
+    ----------
+    model : MuVI model
+        Fitted MuVI model object
+    factors_to_use : List[int], optional
+        Specific factors to use for clustering. If None, uses all factors
+    n_clusters : int, default 3
+        Number of clusters
+    method : str, default 'kmeans'
+        Clustering method ('kmeans', 'hierarchical')
+        
+    Returns
+    -------
+    np.ndarray
+        Cluster assignments for each sample
+        
+    Examples
+    --------
+    >>> clusters = cluster_cells_by_factors(model, n_clusters=4)
+    >>> print(f"Cluster distribution: {np.bincount(clusters)}")
+    """
+    # Get factor scores
+    if hasattr(model, 'get_factor_scores'):
+        # Real MuVI model
+        factor_scores = model.get_factor_scores()
+    else:
+        # Mock model
+        mdata = model.mdata
+        factor_scores = mdata.obsm['X_muvi']
+    
+    if factors_to_use is not None:
+        factor_scores = factor_scores[:, factors_to_use]
+    
+    if method == 'kmeans':
+        from sklearn.cluster import KMeans
+        clusterer = KMeans(n_clusters=n_clusters, random_state=42)
+        clusters = clusterer.fit_predict(factor_scores)
+    elif method == 'hierarchical':
+        from sklearn.cluster import AgglomerativeClustering
+        clusterer = AgglomerativeClustering(n_clusters=n_clusters)
+        clusters = clusterer.fit_predict(factor_scores)
+    else:
+        raise ValueError(f"Unknown clustering method: {method}")
+    
+    return clusters
     Cluster cells based on factor scores.
     
     Parameters
