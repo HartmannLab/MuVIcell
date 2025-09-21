@@ -16,7 +16,7 @@ import warnings
 
 
 def characterize_factors(
-    mdata: mu.MuData,
+    mdata_or_model,
     top_genes_per_factor: int = 50,
     loading_threshold: float = 0.1
 ) -> Dict[str, pd.DataFrame]:
@@ -25,8 +25,8 @@ def characterize_factors(
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or fitted MuVI model
     top_genes_per_factor : int, default 50
         Number of top genes to extract per factor
     loading_threshold : float, default 0.1
@@ -39,13 +39,31 @@ def characterize_factors(
         
     Examples
     --------
-    >>> factor_genes = characterize_factors(mdata_muvi, top_genes_per_factor=25)
-    >>> print(factor_genes['rna'].head())
+    >>> factor_genes = characterize_factors(model, top_genes_per_factor=25)
+    >>> print(factor_genes['view1'].head())
     """
+    # Handle both mdata and model objects
+    if hasattr(mdata_or_model, 'mdata'):
+        mdata = mdata_or_model.mdata
+    else:
+        mdata = mdata_or_model
+        
     factor_characterization = {}
     
     for view_name in mdata.mod.keys():
-        loadings = mdata.mod[view_name].varm['muvi_loadings']
+        # Try to get loadings from different possible keys
+        loadings_key = None
+        possible_keys = ['muvi_loadings', 'loadings', 'factor_loadings']
+        
+        for key in possible_keys:
+            if key in mdata.mod[view_name].varm:
+                loadings_key = key
+                break
+        
+        if loadings_key is None:
+            continue
+            
+        loadings = mdata.mod[view_name].varm[loadings_key]
         gene_names = mdata.mod[view_name].var_names
         n_factors = loadings.shape[1]
         
@@ -76,14 +94,14 @@ def characterize_factors(
     return factor_characterization
 
 
-def calculate_factor_correlations(mdata: mu.MuData) -> pd.DataFrame:
+def calculate_factor_correlations(mdata_or_model) -> pd.DataFrame:
     """
     Calculate correlations between factors.
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or fitted MuVI model
         
     Returns
     -------
@@ -92,9 +110,15 @@ def calculate_factor_correlations(mdata: mu.MuData) -> pd.DataFrame:
         
     Examples
     --------
-    >>> factor_corr = calculate_factor_correlations(mdata_muvi)
+    >>> factor_corr = calculate_factor_correlations(model)
     >>> print(factor_corr)
     """
+    # Handle both mdata and model objects
+    if hasattr(mdata_or_model, 'mdata'):
+        mdata = mdata_or_model.mdata
+    else:
+        mdata = mdata_or_model
+        
     factor_scores = mdata.obsm['X_muvi']
     n_factors = factor_scores.shape[1]
     
@@ -113,7 +137,7 @@ def calculate_factor_correlations(mdata: mu.MuData) -> pd.DataFrame:
 
 
 def identify_factor_associations(
-    mdata: mu.MuData,
+    mdata_or_model,
     metadata_columns: Optional[List[str]] = None,
     categorical_test: str = 'kruskal',
     continuous_test: str = 'pearson'
@@ -123,8 +147,8 @@ def identify_factor_associations(
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or fitted MuVI model
     metadata_columns : List[str], optional
         Specific metadata columns to test. If None, tests all columns
     categorical_test : str, default 'kruskal'
@@ -139,9 +163,15 @@ def identify_factor_associations(
         
     Examples
     --------
-    >>> associations = identify_factor_associations(mdata_muvi)
+    >>> associations = identify_factor_associations(model)
     >>> significant = associations[associations['p_value'] < 0.05]
     """
+    # Handle both mdata and model objects
+    if hasattr(mdata_or_model, 'mdata'):
+        mdata = mdata_or_model.mdata
+    else:
+        mdata = mdata_or_model
+        
     factor_scores = mdata.obsm['X_muvi']
     n_factors = factor_scores.shape[1]
     
@@ -227,7 +257,7 @@ def identify_factor_associations(
 
 
 def cluster_cells_by_factors(
-    mdata: mu.MuData,
+    mdata_or_model,
     n_clusters: int = 5,
     factors_to_use: Optional[List[int]] = None,
     random_state: int = 42
@@ -237,8 +267,8 @@ def cluster_cells_by_factors(
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or fitted MuVI model
     n_clusters : int, default 5
         Number of clusters
     factors_to_use : List[int], optional
@@ -253,9 +283,15 @@ def cluster_cells_by_factors(
         
     Examples
     --------
-    >>> clusters = cluster_cells_by_factors(mdata_muvi, n_clusters=8)
-    >>> mdata_muvi.obs['factor_clusters'] = clusters
+    >>> clusters = cluster_cells_by_factors(model, n_clusters=8)
+    >>> model.mdata.obs['factor_clusters'] = clusters
     """
+    # Handle both mdata and model objects
+    if hasattr(mdata_or_model, 'mdata'):
+        mdata = mdata_or_model.mdata
+    else:
+        mdata = mdata_or_model
+        
     factor_scores = mdata.obsm['X_muvi']
     
     if factors_to_use is not None:
@@ -269,7 +305,7 @@ def cluster_cells_by_factors(
 
 
 def calculate_factor_distances(
-    mdata: mu.MuData,
+    mdata_or_model,
     metric: str = 'euclidean'
 ) -> np.ndarray:
     """
@@ -277,8 +313,8 @@ def calculate_factor_distances(
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or fitted MuVI model
     metric : str, default 'euclidean'
         Distance metric ('euclidean', 'cosine', 'manhattan')
         
@@ -289,8 +325,14 @@ def calculate_factor_distances(
         
     Examples
     --------
-    >>> distances = calculate_factor_distances(mdata_muvi, metric='cosine')
+    >>> distances = calculate_factor_distances(model, metric='cosine')
     """
+    # Handle both mdata and model objects
+    if hasattr(mdata_or_model, 'mdata'):
+        mdata = mdata_or_model.mdata
+    else:
+        mdata = mdata_or_model
+        
     factor_scores = mdata.obsm['X_muvi']
     distance_matrix = pairwise_distances(factor_scores, metric=metric)
     
@@ -298,7 +340,7 @@ def calculate_factor_distances(
 
 
 def summarize_factor_activity(
-    mdata: mu.MuData,
+    mdata_or_model,
     group_by: Optional[str] = None
 ) -> pd.DataFrame:
     """

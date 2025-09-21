@@ -28,7 +28,7 @@ def run_muvi(
     nmf: bool = False,
     device: str = "cpu",
     **muvi_kwargs
-) -> mu.MuData:
+):
     """
     Run MuVI analysis on muon data using the standard muvi.tl.from_mdata pattern.
     
@@ -47,18 +47,19 @@ def run_muvi(
         
     Returns
     -------
-    mu.MuData
-        Muon data object with MuVI results stored in .obsm and .varm
+    model
+        Trained MuVI model object (or mock model for demonstration)
         
     Examples
     --------
-    >>> mdata_muvi = run_muvi(mdata, n_factors=15, nmf=False)
+    >>> model = run_muvi(mdata, n_factors=15, nmf=False)
+    >>> model.fit()
     """
     if not MUVI_AVAILABLE:
         warnings.warn("MuVI not available. Creating mock results for demonstration.")
-        return _create_mock_muvi_results(mdata, n_factors)
+        return _create_mock_muvi_model(mdata, n_factors)
     
-    # Create and fit MuVI model using the standard API
+    # Create MuVI model using the standard API
     model = muvi.tl.from_mdata(
         mdata,
         n_factors=n_factors,
@@ -67,63 +68,65 @@ def run_muvi(
         **muvi_kwargs
     )
     
-    # Fit the model
-    model.fit()
-    
-    # Store results in mdata - the model automatically updates the mdata object
-    # MuVI stores results in the standard locations:
-    # - Factor scores in mdata.obsm['X_muvi']
-    # - Factor loadings in mdata.varm for each view
-    # - Variance explained in mdata.uns
-    
-    return mdata
+    return model
 
 
-def _create_mock_muvi_results(mdata: mu.MuData, n_factors: int = 10) -> mu.MuData:
-    """Create mock MuVI results for demonstration when MuVI is not available."""
-    mdata_result = mdata.copy()
-    n_cells = mdata.n_obs
+def _create_mock_muvi_model(mdata: mu.MuData, n_factors: int = 10):
+    """Create mock MuVI model for demonstration when MuVI is not available."""
     
-    # Create mock factor scores
-    mdata_result.obsm['X_muvi'] = np.random.normal(0, 1, size=(n_cells, n_factors))
-    
-    # Create mock factor loadings for each view
-    for view_name, view_data in mdata_result.mod.items():
-        n_vars = view_data.n_vars
-        # Create sparse loadings (most genes have small loadings)
-        loadings = np.random.normal(0, 0.1, (n_vars, n_factors))
-        
-        # Make some genes have stronger loadings
-        for f in range(n_factors):
-            strong_genes = np.random.choice(n_vars, size=max(1, n_vars//4), replace=False)
-            loadings[strong_genes, f] += np.random.normal(0, 0.5, len(strong_genes))
-        
-        mdata_result.mod[view_name].varm['muvi_loadings'] = loadings
-    
-    # Create mock variance explained
-    base_variance = np.array([0.15, 0.12, 0.10, 0.08, 0.06, 0.04, 0.03, 0.02, 0.01, 0.01][:n_factors])
-    mdata_result.uns['muvi_variance_explained'] = {
-        view_name: base_variance * np.random.uniform(0.8, 1.2, n_factors)
-        for view_name in mdata_result.mod.keys()
-    }
-    
-    # Store model parameters
-    mdata_result.uns['muvi_model_params'] = {
-        'n_factors': n_factors,
-        'mock': True
-    }
-    
-    return mdata_result
+    class MockMuVIModel:
+        def __init__(self, mdata, n_factors):
+            self.mdata = mdata
+            self.n_factors = n_factors
+            self.fitted = False
+            
+        def fit(self):
+            """Fit the mock model and store results in mdata."""
+            n_cells = self.mdata.n_obs
+            
+            # Create mock factor scores
+            self.mdata.obsm['X_muvi'] = np.random.normal(0, 1, size=(n_cells, self.n_factors))
+            
+            # Create mock factor loadings for each view
+            for view_name, view_data in self.mdata.mod.items():
+                n_vars = view_data.n_vars
+                # Create sparse loadings (most genes have small loadings)
+                loadings = np.random.normal(0, 0.1, (n_vars, self.n_factors))
+                
+                # Make some genes have stronger loadings
+                for f in range(self.n_factors):
+                    strong_genes = np.random.choice(n_vars, size=max(1, n_vars//4), replace=False)
+                    loadings[strong_genes, f] += np.random.normal(0, 0.5, len(strong_genes))
+                
+                self.mdata.mod[view_name].varm['muvi_loadings'] = loadings
+            
+            # Create mock variance explained
+            base_variance = np.array([0.15, 0.12, 0.10, 0.08, 0.06, 0.04, 0.03, 0.02, 0.01, 0.01][:self.n_factors])
+            self.mdata.uns['muvi_variance_explained'] = {
+                view_name: base_variance * np.random.uniform(0.8, 1.2, self.n_factors)
+                for view_name in self.mdata.mod.keys()
+            }
+            
+            # Store model parameters
+            self.mdata.uns['muvi_model_params'] = {
+                'n_factors': self.n_factors,
+                'mock': True
+            }
+            
+            self.fitted = True
+            return self
+            
+    return MockMuVIModel(mdata, n_factors)
 
 
-def get_factor_scores(mdata: mu.MuData) -> np.ndarray:
+def get_factor_scores(mdata_or_model) -> np.ndarray:
     """
     Extract factor scores (cell embeddings) from MuVI results.
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or fitted MuVI model
         
     Returns
     -------
@@ -132,23 +135,29 @@ def get_factor_scores(mdata: mu.MuData) -> np.ndarray:
         
     Examples
     --------
-    >>> scores = get_factor_scores(mdata_muvi)
+    >>> scores = get_factor_scores(model.mdata)
     >>> print(f"Factor scores shape: {scores.shape}")
     """
+    # Handle both mdata and model objects
+    if hasattr(mdata_or_model, 'mdata'):
+        mdata = mdata_or_model.mdata
+    else:
+        mdata = mdata_or_model
+        
     if 'X_muvi' not in mdata.obsm:
-        raise ValueError("No MuVI results found. Run run_muvi() first.")
+        raise ValueError("No MuVI results found. Run model.fit() first.")
     
     return mdata.obsm['X_muvi']
 
 
-def get_factor_loadings(mdata: mu.MuData, view: str) -> np.ndarray:
+def get_factor_loadings(mdata_or_model, view: str) -> np.ndarray:
     """
     Extract factor loadings for a specific view from MuVI results.
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or fitted MuVI model
     view : str
         Name of the view
         
@@ -159,9 +168,15 @@ def get_factor_loadings(mdata: mu.MuData, view: str) -> np.ndarray:
         
     Examples
     --------
-    >>> loadings = get_factor_loadings(mdata_muvi, 'view1')
+    >>> loadings = get_factor_loadings(model.mdata, 'view1')
     >>> print(f"View1 loadings shape: {loadings.shape}")
     """
+    # Handle both mdata and model objects
+    if hasattr(mdata_or_model, 'mdata'):
+        mdata = mdata_or_model.mdata
+    else:
+        mdata = mdata_or_model
+        
     if view not in mdata.mod:
         raise ValueError(f"View '{view}' not found in muon data.")
     
@@ -182,19 +197,19 @@ def get_factor_loadings(mdata: mu.MuData, view: str) -> np.ndarray:
                 break
     
     if loadings_key is None:
-        raise ValueError(f"No MuVI loadings found for view '{view}'. Run run_muvi() first.")
+        raise ValueError(f"No MuVI loadings found for view '{view}'. Run model.fit() first.")
     
     return mdata.mod[view].varm[loadings_key]
 
 
-def get_variance_explained(mdata: mu.MuData) -> Dict[str, np.ndarray]:
+def get_variance_explained(mdata_or_model) -> Dict[str, np.ndarray]:
     """
     Extract variance explained by each factor from MuVI results.
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or fitted MuVI model
         
     Returns
     -------
@@ -203,9 +218,15 @@ def get_variance_explained(mdata: mu.MuData) -> Dict[str, np.ndarray]:
         
     Examples
     --------
-    >>> var_exp = get_variance_explained(mdata_muvi)
+    >>> var_exp = get_variance_explained(model.mdata)
     >>> print(f"Variance explained: {var_exp}")
     """
+    # Handle both mdata and model objects
+    if hasattr(mdata_or_model, 'mdata'):
+        mdata = mdata_or_model.mdata
+    else:
+        mdata = mdata_or_model
+        
     # Check for variance explained in uns (try different possible keys)
     var_exp_key = None
     possible_keys = ['muvi_variance_explained', 'variance_explained', 'r2']
@@ -223,13 +244,13 @@ def get_variance_explained(mdata: mu.MuData) -> Dict[str, np.ndarray]:
                 break
     
     if var_exp_key is None:
-        raise ValueError("No MuVI variance explained found. Run run_muvi() first.")
+        raise ValueError("No MuVI variance explained found. Run model.fit() first.")
     
     return mdata.uns[var_exp_key]
 
 
 def select_top_factors(
-    mdata: mu.MuData,
+    mdata_or_model,
     n_top_factors: Optional[int] = None,
     variance_threshold: float = 0.01
 ) -> List[int]:
@@ -238,8 +259,8 @@ def select_top_factors(
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or fitted MuVI model
     n_top_factors : int, optional
         Number of top factors to select. If None, uses variance_threshold
     variance_threshold : float, default 0.01
@@ -252,11 +273,11 @@ def select_top_factors(
         
     Examples
     --------
-    >>> top_factors = select_top_factors(mdata_muvi, n_top_factors=5)
+    >>> top_factors = select_top_factors(model.mdata, n_top_factors=5)
     >>> # Or based on variance threshold
-    >>> top_factors = select_top_factors(mdata_muvi, variance_threshold=0.02)
+    >>> top_factors = select_top_factors(model.mdata, variance_threshold=0.02)
     """
-    var_exp = get_variance_explained(mdata)
+    var_exp = get_variance_explained(mdata_or_model)
     
     # Calculate total variance explained per factor across all views
     total_var_per_factor = np.sum([

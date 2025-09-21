@@ -15,7 +15,7 @@ import warnings
 
 
 def generate_synthetic_data(
-    n_cells: int = 200,
+    n_samples: int = 200,
     view_configs: Optional[Dict[str, Dict]] = None,
     random_state: int = 42
 ) -> mu.MuData:
@@ -24,8 +24,8 @@ def generate_synthetic_data(
     
     Parameters
     ----------
-    n_cells : int, default 200
-        Number of cells to generate
+    n_samples : int, default 200
+        Number of samples to generate (each row represents a sample, not individual cells)
     view_configs : Dict[str, Dict], optional
         Configuration for each view. If None, creates default 3 views
         with 5, 10, and 15 features respectively
@@ -40,14 +40,14 @@ def generate_synthetic_data(
     Examples
     --------
     >>> # Generate default synthetic data
-    >>> mdata = generate_synthetic_data(n_cells=300)
+    >>> mdata = generate_synthetic_data(n_samples=300)
     >>> 
     >>> # Generate custom synthetic data
     >>> configs = {
     ...     'rna': {'n_vars': 100, 'sparsity': 0.7},
     ...     'protein': {'n_vars': 50, 'sparsity': 0.3}
     ... }
-    >>> mdata = generate_synthetic_data(n_cells=200, view_configs=configs)
+    >>> mdata = generate_synthetic_data(n_samples=200, view_configs=configs)
     """
     np.random.seed(random_state)
     
@@ -59,18 +59,18 @@ def generate_synthetic_data(
             'view3': {'n_vars': 15, 'sparsity': 0.5}
         }
     
-    # Generate shared cell metadata
-    cell_types = np.random.choice(['TypeA', 'TypeB', 'TypeC'], size=n_cells, p=[0.4, 0.35, 0.25])
-    conditions = np.random.choice(['Control', 'Treatment'], size=n_cells, p=[0.6, 0.4])
+    # Generate shared sample metadata
+    cell_types = np.random.choice(['TypeA', 'TypeB', 'TypeC'], size=n_samples, p=[0.4, 0.35, 0.25])
+    conditions = np.random.choice(['Control', 'Treatment'], size=n_samples, p=[0.6, 0.4])
     
     obs_df = pd.DataFrame({
-        'cell_id': [f'Cell_{i}' for i in range(n_cells)],
+        'sample_id': [f'Sample_{i}' for i in range(n_samples)],
         'cell_type': cell_types,
         'condition': conditions,
-        'batch': np.random.choice(['Batch1', 'Batch2'], size=n_cells),
-        'total_counts': np.random.lognormal(mean=8, sigma=0.5, size=n_cells)
+        'batch': np.random.choice(['Batch1', 'Batch2'], size=n_samples),
+        'total_counts': np.random.lognormal(mean=8, sigma=0.5, size=n_samples)
     })
-    obs_df.index = obs_df['cell_id']
+    obs_df.index = obs_df['sample_id']
     
     # Generate views
     view_adatas = {}
@@ -81,7 +81,7 @@ def generate_synthetic_data(
         
         # Generate synthetic expression data
         view_data = _generate_view_data(
-            n_cells=n_cells,
+            n_samples=n_samples,
             n_vars=n_vars,
             cell_types=cell_types,
             conditions=conditions,
@@ -113,7 +113,7 @@ def generate_synthetic_data(
 
 
 def _generate_view_data(
-    n_cells: int,
+    n_samples: int,
     n_vars: int,
     cell_types: np.ndarray,
     conditions: np.ndarray,
@@ -125,7 +125,7 @@ def _generate_view_data(
     
     Parameters
     ----------
-    n_cells : int
+    n_samples : int
         Number of cells
     n_vars : int
         Number of variables/genes
@@ -146,7 +146,7 @@ def _generate_view_data(
     np.random.seed(random_state)
     
     # Create base expression levels
-    base_expression = np.random.lognormal(mean=2, sigma=1, size=(n_cells, n_vars))
+    base_expression = np.random.lognormal(mean=2, sigma=1, size=(n_samples, n_vars))
     
     # Add cell type effects
     unique_cell_types = np.unique(cell_types)
@@ -176,11 +176,11 @@ def _generate_view_data(
             base_expression[condition_mask, gene_idx] *= np.exp(effect_size[j])
     
     # Add noise
-    noise = np.random.normal(0, 0.1, size=(n_cells, n_vars))
+    noise = np.random.normal(0, 0.1, size=(n_samples, n_vars))
     expression_data = base_expression * np.exp(noise)
     
     # Introduce sparsity
-    dropout_mask = np.random.binomial(1, sparsity, size=(n_cells, n_vars))
+    dropout_mask = np.random.binomial(1, sparsity, size=(n_samples, n_vars))
     expression_data[dropout_mask.astype(bool)] = 0
     
     # Ensure non-negative values
@@ -223,10 +223,10 @@ def add_latent_structure(
     if len(factor_variance) != n_latent_factors:
         raise ValueError("Length of factor_variance must match n_latent_factors")
     
-    n_cells = mdata.n_obs
+    n_samples = mdata.n_obs
     
     # Generate latent factors (cell loadings)
-    latent_factors = np.random.normal(0, 1, size=(n_cells, n_latent_factors))
+    latent_factors = np.random.normal(0, 1, size=(n_samples, n_latent_factors))
     
     # Add factor structure to each view
     mdata_structured = mdata.copy()
