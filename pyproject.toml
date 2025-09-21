@@ -1,6 +1,6 @@
 [project]
 name = "muvicell"
-version = "0.1.0"
+version = "0.1.1"
 description = "From cell-type stratified features to multicellular coordinated programs"
 readme = "README.md"
 authors = [
@@ -18,7 +18,7 @@ dependencies = [
     "muon",
     "jupyter",
     "torch>=2.6.0",
-    "tensordict>=0.6.2",
+    "tensordict>=0.7.2,<0.8.0",
     "muvi"
 ]
 
