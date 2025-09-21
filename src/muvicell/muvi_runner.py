@@ -102,10 +102,12 @@ def _create_mock_muvi_model(mdata: mu.MuData, n_factors: int = 3):
                 
                 # Make each factor strongly load on different sets of genes
                 for f in range(self.n_factors):
-                    # Each factor gets 20-40% of genes with strong loadings
-                    n_strong = max(1, int(n_vars * np.random.uniform(0.2, 0.4)))
-                    strong_genes = np.random.choice(n_vars, size=n_strong, replace=False)
-                    loadings[strong_genes, f] += np.random.normal(0, 0.3, len(strong_genes))
+                    if n_vars > 0:  # Only if there are variables
+                        # Each factor gets 20-40% of genes with strong loadings
+                        n_strong = max(1, int(n_vars * np.random.uniform(0.2, 0.4)))
+                        if n_strong <= n_vars:  # Ensure we don't ask for more than available
+                            strong_genes = np.random.choice(n_vars, size=n_strong, replace=False)
+                            loadings[strong_genes, f] += np.random.normal(0, 0.3, len(strong_genes))
                 
                 self.factor_loadings[view_name] = loadings
                 

@@ -333,45 +333,6 @@ def cluster_cells_by_factors(
         raise ValueError(f"Unknown clustering method: {method}")
     
     return clusters
-    Cluster cells based on factor scores.
-    
-    Parameters
-    ----------
-    mdata_or_model : mu.MuData or MuVI model
-        Muon data object with MuVI results or fitted MuVI model
-    n_clusters : int, default 5
-        Number of clusters
-    factors_to_use : List[int], optional
-        Specific factors to use for clustering. If None, uses all factors
-    random_state : int, default 42
-        Random state for reproducibility
-        
-    Returns
-    -------
-    np.ndarray
-        Cluster labels for each cell
-        
-    Examples
-    --------
-    >>> clusters = cluster_cells_by_factors(model, n_clusters=8)
-    >>> model.mdata.obs['factor_clusters'] = clusters
-    """
-    # Handle both mdata and model objects
-    if hasattr(mdata_or_model, 'mdata'):
-        mdata = mdata_or_model.mdata
-    else:
-        mdata = mdata_or_model
-        
-    factor_scores = mdata.obsm['X_muvi']
-    
-    if factors_to_use is not None:
-        factor_scores = factor_scores[:, factors_to_use]
-    
-    # Perform K-means clustering
-    kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
-    cluster_labels = kmeans.fit_predict(factor_scores)
-    
-    return cluster_labels
 
 
 def calculate_factor_distances(
@@ -418,8 +379,8 @@ def summarize_factor_activity(
     
     Parameters
     ----------
-    mdata : mu.MuData
-        Muon data object with MuVI results
+    mdata_or_model : mu.MuData or MuVI model
+        Muon data object with MuVI results or MuVI model object
     group_by : str, optional
         Column in mdata.obs to group cells by
         
@@ -433,7 +394,16 @@ def summarize_factor_activity(
     >>> summary = summarize_factor_activity(mdata_muvi, group_by='cell_type')
     >>> print(summary)
     """
-    factor_scores = mdata.obsm['X_muvi']
+    # Handle both mdata and model objects
+    if hasattr(mdata_or_model, 'get_factor_scores'):
+        # MuVI model object
+        factor_scores = mdata_or_model.get_factor_scores()
+        mdata = mdata_or_model.mdata_original
+    else:
+        # MuData object
+        factor_scores = mdata_or_model.obsm['X_muvi']
+        mdata = mdata_or_model
+    
     n_factors = factor_scores.shape[1]
     factor_names = [f'Factor_{i}' for i in range(n_factors)]
     
@@ -446,6 +416,7 @@ def summarize_factor_activity(
             'min_activity': np.min(factor_scores, axis=0),
             'max_activity': np.max(factor_scores, axis=0)
         }
+        return pd.DataFrame(summary_data)
     else:
         # Group-wise summary
         if group_by not in mdata.obs.columns:
@@ -469,7 +440,4 @@ def summarize_factor_activity(
                     'n_cells': group_mask.sum()
                 })
         
-        summary_data = pd.DataFrame(summary_rows)
-        return summary_data
-    
-    return pd.DataFrame(summary_data)
+        return pd.DataFrame(summary_rows)
