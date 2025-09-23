@@ -1,218 +1,203 @@
 # MuVIcell
-
 **From cell-type stratified features to multicellular coordinated programs**
 
-MuVIcell is a Python package for multi-view integration and analysis of single-cell data using MuVI (Multi-View Integration). It provides a streamlined workflow for analyzing multi-modal datasets, identifying latent factors that capture coordinated programs across different molecular layers.
+MuVIcell is a comprehensive Python package for multi-view integration and analysis of sample-aggregated single-cell data using MuVI (Multi-View Integration). The package enables researchers to identify latent factors that capture coordinated programs across different molecular layers (e.g., RNA, protein, chromatin accessibility) in multicellular systems.
 
-**Note**: In the context of MuVIcell, each row in the muon object represents a sample (not individual cells), and the views typically contain cell type aggregated data per sample.
+## Overview
 
-## Features
+MuVIcell provides a streamlined workflow for analyzing multi-modal datasets where:
+- Each **row** represents a **sample** (not individual cells)
+- **Views** contain **cell type aggregated data per sample**
+- The goal is to identify latent factors capturing coordinated multicellular programs
 
-- 🧬 **Multi-view integration** using MuVI for single-cell data
-- 📊 **Comprehensive preprocessing** pipeline with sensible defaults
-- 🔍 **Factor analysis and interpretation** tools
-- 📈 **Rich visualization** capabilities using plotnine
-- 🧪 **Synthetic data generation** for testing and development
-- ✅ **Extensive testing** to ensure reliability
-- 📚 **Complete documentation** and tutorials
+## Key Features
+
+- **Complete MuVI Integration**: Uses the exact same API as the original MOFACell analysis
+- **Synthetic Data Generation**: Create realistic multi-view datasets for testing and development
+- **Comprehensive Analysis**: Factor characterization, variance analysis, and statistical testing
+- **Rich Visualizations**: Publication-ready plots using plotnine
+- **Robust Testing**: Extensive test suite ensuring reliability
 
 ## Installation
 
 ### Requirements
+- Python ≥ 3.10
+- PyTorch ≥ 2.6.0
+- MuVI (Multi-View Integration)
 
-**Important**: MuVI requires Python 3.9-3.10. Python 3.11+ is not currently supported by MuVI.
+### Installation Steps
 
-For the full MuVI functionality:
+**For full functionality (recommended):**
 ```bash
-# Create a Python 3.10 environment
 conda create -n muvicell python=3.10
 conda activate muvicell
-
-# Clone and install
 git clone https://github.com/HartmannLab/MuVIcell.git
 cd MuVIcell
-pip install -e .[muvi]
-```
-
-For development without MuVI (Python 3.11+ compatible):
-```bash
-# Clone the repository  
-git clone https://github.com/HartmannLab/MuVIcell.git
-cd MuVIcell
-
-# Install without MuVI (will use mock implementation)
 pip install -e .
 ```
 
-### Dependencies
-
-Core dependencies:
-- `muon` - Multi-modal omics data handling
-- `plotnine` - Grammar of graphics visualization
-- `scanpy` - Single-cell analysis
-- `pandas`, `numpy`, `scipy` - Data manipulation and analysis
-
-Optional dependencies:
-- `muvi` - Multi-view integration (requires Python 3.9-3.10)
+**Development installation:**
+```bash
+git clone https://github.com/HartmannLab/MuVIcell.git
+cd MuVIcell
+pip install -e .
+```
 
 ## Quick Start
 
+### Basic Workflow
+
 ```python
-import numpy as np
-from muvicell import synthetic, preprocessing, muvi_runner, analysis, visualization
+import muvi
+import muvi.tl
+from muvicell import synthetic, preprocessing, analysis, visualization
 
 # 1. Generate synthetic multi-view data
 mdata = synthetic.generate_synthetic_data(
-    n_cells=200,
+    n_samples=200,
+    n_true_factors=3,
     view_configs={
-        'rna': {'n_vars': 100, 'sparsity': 0.3},
-        'protein': {'n_vars': 50, 'sparsity': 0.2}
+        'view1': {'n_vars': 5, 'sparsity': 0.3},
+        'view2': {'n_vars': 10, 'sparsity': 0.4},
+        'view3': {'n_vars': 15, 'sparsity': 0.5}
     }
 )
 
-# 2. Preprocess for MuVI analysis
-mdata_processed = preprocessing.preprocess_for_muvi(mdata)
+# 2. Add latent structure
+mdata_structured = synthetic.add_latent_structure(mdata, n_latent_factors=3)
 
-# 3. Run MuVI
-mdata_muvi = muvi_runner.run_muvi(mdata_processed, n_factors=10)
+# 3. Preprocess for MuVI analysis
+mdata_processed = preprocessing.preprocess_for_muvi(mdata_structured)
 
-# 4. Analyze factors
-factor_genes = analysis.characterize_factors(mdata_muvi)
-associations = analysis.identify_factor_associations(mdata_muvi)
+# 4. Run MuVI using exact same API as original analysis
+model = muvi.tl.from_mdata(mdata_processed, n_factors=3, nmf=False)
+model.fit()
 
-# 5. Visualize results
-p1 = visualization.plot_variance_explained(mdata_muvi)
-p2 = visualization.plot_factor_scores(mdata_muvi, color_by='cell_type')
+# 5. Analyze results
+reconstruction_stats = analysis.muvi_reconstruction_info(model, mdata_processed)
+variance_df = analysis.muvi_variance_by_view_info(model)
+factor_scores = analysis.muvi_factor_scores_info(model, mdata_processed, obs_keys=['cell_type', 'condition'])
+
+# 6. Create visualizations
+p1 = visualization.muvi_variance_by_view_plot(variance_df)
+p1.show()
+
+p2 = visualization.muvi_violin_plot(factor_scores, "Factor 1", "cell_type")
+p2.show()
 ```
-
-## Tutorial
-
-See the [MuVIcell Tutorial](notebooks/MuVIcell_Tutorial.ipynb) Jupyter notebook for a comprehensive walkthrough of the package functionality.
 
 ## Package Structure
 
+The package includes six core modules:
+
+### `synthetic.py`
+Generate realistic synthetic multi-view data with configurable latent structure:
+- `generate_synthetic_data()`: Create multi-view datasets
+- `add_latent_structure()`: Add realistic factor structure
+
+### `preprocessing.py`
+Complete preprocessing pipeline for MuVI analysis:
+- `preprocess_for_muvi()`: All-in-one preprocessing function
+- `normalize_views()`: View-specific normalization
+- `find_highly_variable_genes()`: HVG detection across views
+
+### `analysis.py`
+Comprehensive factor analysis and interpretation:
+- `muvi_reconstruction_info()`: Reconstruction quality assessment
+- `muvi_variance_by_view_info()`: Variance explained analysis
+- `muvi_variable_loadings_info()`: Feature loadings extraction
+- `muvi_factor_scores_info()`: Factor scores with metadata
+- `muvi_kruskal_info()`: Statistical testing for categorical variables
+- `muvi_kendall_info()`: Statistical testing for ordinal variables
+
+### `visualization.py`
+Publication-ready plotting functions using plotnine:
+- `muvi_variance_by_view_plot()`: Variance heatmaps with marginals
+- `muvi_reconstruction_plot()`: Reconstruction quality plots
+- `muvi_plot_top_loadings_heatmap()`: Feature loading heatmaps
+- `muvi_violin_plot()`: Factor distribution plots
+- `muvi_confidence_ellipses_plot()`: Group confidence ellipses
+
+### `data.py`
+Data loading and validation utilities:
+- `validate_for_muvi()`: Ensure data compatibility
+- `get_view_info()`: Extract view metadata
+
+## Tutorial and Examples
+
+### Jupyter Notebook Tutorial
+The package includes a comprehensive tutorial notebook (`notebooks/MuVIcell_Tutorial.ipynb`) that demonstrates:
+- Complete workflow from synthetic data generation to final analysis
+- All major analysis and visualization functions
+- Statistical testing and interpretation
+- Best practices for real data analysis
+
+### Real Data Analysis Example
+For an example of the workflow applied to real data, see the original MOFACell analysis:
+[MIBI Analysis Hamburg CRC TMA 2024](https://github.com/HartmannLab/MIBI-Analysis_Hamburg_CRC_TMA_2024/blob/main/notebooks/multicellular/MOFACell.ipynb)
+
+## API Reference
+
+### Core Analysis Functions
+
+#### Reconstruction Analysis
+```python
+reconstruction_stats = analysis.muvi_reconstruction_info(model, mdata)
+plot = visualization.muvi_reconstruction_plot(reconstruction_stats['by_view'])
 ```
-muvicell/
-├── src/muvicell/
-│   ├── data.py              # Data loading and validation
-│   ├── preprocessing.py     # Data preprocessing utilities
-│   ├── muvi_runner.py      # MuVI wrapper functions
-│   ├── analysis.py         # Factor analysis and interpretation
-│   ├── visualization.py    # Plotting functions
-│   └── synthetic.py        # Synthetic data generation
-├── tests/                  # Comprehensive test suite
-├── notebooks/             # Tutorial notebooks
-└── docs/                  # Documentation
+
+#### Variance Analysis
+```python
+variance_df = analysis.muvi_variance_by_view_info(model)
+plot = visualization.muvi_variance_by_view_plot(variance_df)
 ```
 
-## Core Modules
+#### Factor Characterization
+```python
+loadings_df = analysis.muvi_variable_loadings_info(model, mdata)
+plot = visualization.muvi_plot_top_loadings_heatmap(loadings_df, factor="Factor 1")
+```
 
-### 1. Data Handling (`data.py`)
-- Load and save muon data objects
-- Validate data for MuVI analysis
-- Get view information and statistics
+#### Statistical Testing
+```python
+scores_df = analysis.muvi_factor_scores_info(model, mdata, obs_keys=['group'])
+kruskal_results = analysis.muvi_kruskal_info(scores_df, 'group')
+violin_plot = visualization.muvi_violin_plot(scores_df, "Factor 1", 'group')
+```
 
-### 2. Preprocessing (`preprocessing.py`)
-- Normalize multi-view data
-- Filter cells and genes
-- Find highly variable genes
-- Complete preprocessing pipeline
+## Data Format
 
-### 3. MuVI Runner (`muvi_runner.py`)
-- Set up and run MuVI models
-- Extract factor scores and loadings
-- Calculate variance explained
-- Select top factors
-
-### 4. Analysis (`analysis.py`)
-- Characterize factors by top genes
-- Identify factor-metadata associations
-- Cluster cells based on factors
-- Calculate factor correlations
-
-### 5. Visualization (`visualization.py`)
-- Plot variance explained
-- Visualize factor scores and loadings
-- Show factor-metadata associations
-- Create factor heatmaps
-
-### 6. Synthetic Data (`synthetic.py`)
-- Generate realistic multi-view datasets
-- Add latent factor structure
-- Simulate batch effects and missing data
-
-## Workflow Overview
-
-MuVIcell follows a structured workflow:
-
-1. **Data Loading/Generation**
-   - Load real multi-view data or generate synthetic data
-   - Validate data structure for MuVI compatibility
-
-2. **Preprocessing**
-   - Normalize expression data
-   - Filter low-quality cells and genes
-   - Identify highly variable genes
-
-3. **MuVI Analysis**
-   - Run multi-view integration
-   - Identify latent factors across views
-   - Extract factor scores and loadings
-
-4. **Factor Interpretation**
-   - Characterize factors by contributing genes
-   - Identify associations with cell metadata
-   - Cluster cells based on factor activity
-
-5. **Visualization**
-   - Create publication-ready plots
-   - Visualize factor structure and interpretation
+MuVIcell works with MuData objects where:
+- **Observations (rows)**: Samples (e.g., patients, conditions, time points)
+- **Views**: Different molecular layers or data types
+- **Features**: Cell type aggregated measurements per view
+- **Metadata**: Sample-level annotations (stored in `mdata.obs`)
 
 ## Testing
 
 Run the test suite to ensure everything works correctly:
 
 ```bash
-# Run all tests
 pytest tests/
-
-# Run with coverage
-pytest tests/ --cov=MuVIcell --cov-report=html
 ```
 
-## Development
+The test suite includes:
+- Unit tests for all modules
+- Integration tests for complete workflows
+- Notebook execution tests
 
-### Setting up a development environment
+## Documentation
 
-```bash
-# Clone and install in development mode
-git clone https://github.com/HartmannLab/MuVIcell.git
-cd MuVIcell
+- **API Documentation**: Comprehensive function reference in `docs/API.md`
+- **Tutorial Notebook**: Step-by-step workflow guide
+- **Examples**: Real data analysis examples
 
-# Install with development dependencies
-uv sync --extra dev
+## Acknowledgments
 
-# Run tests
-pytest tests/
-
-# Format code
-black src/ tests/
-isort src/ tests/
-
-# Lint code
-flake8 src/ tests/
-```
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make changes and add tests
-4. Ensure tests pass (`pytest tests/`)
-5. Format code (`black .` and `isort .`)
-6. Commit changes (`git commit -m 'Add amazing feature'`)
-7. Push to branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
+This package builds upon and acknowledges:
+- **[LIANA+](https://github.com/saezlab/liana-py)**: For handling and interpreting factors
+- **[MOFAcell](https://github.com/saezlab/MOFAcell)**: As conceptual inspiration
+- **[MuVI](https://github.com/MLO-lab/MuVI)**: For multi-view integration methodology
 
 ## Citation
 
@@ -220,7 +205,7 @@ If you use MuVIcell in your research, please cite:
 
 ```bibtex
 @software{muvicell2024,
-  title={MuVIcell: From cell-type stratified features to multicellular coordinated programs},
+  title={MuVIcell: Multi-view integration for sample-aggregated single-cell analysis},
   author={HartmannLab},
   year={2024},
   url={https://github.com/HartmannLab/MuVIcell}
@@ -231,18 +216,13 @@ If you use MuVIcell in your research, please cite:
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
+## Contributing
 
-- [MuVI](https://github.com/gtca/muvi) for multi-view integration methodology
-- [LIANA+](https://github.com/saezlab/liana-py) for handling and interpreting factors in multi-cellular contexts
-- [MOFAcell](https://github.com/saezlab/MOFAcell) as conceptual inspiration for multicellular factor analysis
-- [muon](https://github.com/scverse/muon) for multi-modal data handling
-- [scanpy](https://github.com/scverse/scanpy) for single-cell analysis tools
-- [plotnine](https://github.com/has2k1/plotnine) for grammar of graphics visualization
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Support
 
-For questions, issues, or contributions:
-- 📧 Contact: [HartmannLab](mailto:info@hartmannlab.org)
-- 🐛 Issues: [GitHub Issues](https://github.com/HartmannLab/MuVIcell/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/HartmannLab/MuVIcell/discussions)
+For questions, issues, or feature requests, please:
+1. Check the [tutorial notebook](notebooks/MuVIcell_Tutorial.ipynb)
+2. Review the [API documentation](docs/API.md)
+3. Open an issue on GitHub
