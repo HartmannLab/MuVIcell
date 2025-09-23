@@ -1,0 +1,269 @@
+"""
+Preprocessing utilities for MuVIcell.
+
+This module provides functions for preprocessing multi-view data
+before MuVI analysis, including normalization and filtering.
+"""
+
+import muon as mu
+import scanpy as sc
+import numpy as np
+from typing import Optional, Dict
+import warnings
+
+
+def normalize_views(
+    mdata: mu.MuData
+) -> mu.MuData:
+    """
+    Normalize data in each view of the muon object.
+    
+    Centers and scales each feature (column) by subtracting the mean 
+    and dividing by the standard deviation, ignoring NA values.
+    
+    Parameters
+    ----------
+    mdata : mu.MuData
+        Muon data object with multiple views
+        
+    Returns
+    -------
+    mu.MuData
+        Normalized muon data object
+        
+    Examples
+    --------
+    >>> mdata_norm = normalize_views(mdata)
+    """
+    mdata_norm = mdata.copy()
+    
+    for view_name, view_data in mdata_norm.mod.items():
+        print(f"Modality name: {view_name}")
+        
+        # Center and scale each column of the data, ignoring NA values
+        view_data.X = view_data.X - np.nanmean(view_data.X, axis=0, keepdims=True)
+        view_data.X = view_data.X / np.nanstd(view_data.X, axis=0)
+    
+    return mdata_norm
+
+
+def filter_views(
+    mdata: mu.MuData,
+    min_cells_per_gene: int = 3,
+    min_genes_per_cell: int = 200,
+    max_genes_per_cell: Optional[int] = None,
+    view_specific_filters: Optional[Dict[str, Dict]] = None
+) -> mu.MuData:
+    """
+    Filter cells and genes in each view.
+    
+    Parameters
+    ----------
+    mdata : mu.MuData
+        Muon data object
+    min_cells_per_gene : int, default 3
+        Minimum number of cells expressing a gene
+    min_genes_per_cell : int, default 200
+        Minimum number of genes per cell
+    max_genes_per_cell : int, optional
+        Maximum number of genes per cell
+    view_specific_filters : Dict[str, Dict], optional
+        View-specific filtering parameters
+        
+    Returns
+    -------
+    mu.MuData
+        Filtered muon data object
+        
+    Examples
+    --------
+    >>> mdata_filt = filter_views(mdata, min_cells_per_gene=5)
+    """
+    mdata_filt = mdata.copy()
+    
+    for view_name, view_data in mdata_filt.mod.items():
+        # Get view-specific filters or use defaults
+        if view_specific_filters and view_name in view_specific_filters:
+            filters = view_specific_filters[view_name]
+            min_cells = filters.get('min_cells_per_gene', min_cells_per_gene)
+            min_genes = filters.get('min_genes_per_cell', min_genes_per_cell)
+            max_genes = filters.get('max_genes_per_cell', max_genes_per_cell)
+        else:
+            min_cells = min_cells_per_gene
+            min_genes = min_genes_per_cell
+            max_genes = max_genes_per_cell
+        
+        # Filter genes
+        sc.pp.filter_genes(view_data, min_cells=min_cells)
+        
+        # Filter cells
+        sc.pp.filter_cells(view_data, min_genes=min_genes)
+        if max_genes is not None:
+            sc.pp.filter_cells(view_data, max_genes=max_genes)
+    
+    return mdata_filt
+
+
+def find_highly_variable_genes(
+    mdata: mu.MuData,
+    n_top_genes: int = 2000,
+    view_specific_n_genes: Optional[Dict[str, int]] = None
+) -> mu.MuData:
+    """
+    Find highly variable genes in each view.
+    
+    Parameters
+    ----------
+    mdata : mu.MuData
+        Muon data object
+    n_top_genes : int, default 2000
+        Number of highly variable genes to select
+    view_specific_n_genes : Dict[str, int], optional
+        View-specific number of genes to select
+        
+    Returns
+    -------
+    mu.MuData
+        Muon data object with highly variable genes identified
+        
+    Examples
+    --------
+    >>> mdata_hvg = find_highly_variable_genes(mdata, n_top_genes=1500)
+    """
+    mdata_hvg = mdata.copy()
+    
+    for view_name, view_data in mdata_hvg.mod.items():
+        # Get view-specific number of genes or use default
+        if view_specific_n_genes and view_name in view_specific_n_genes:
+            n_genes = view_specific_n_genes[view_name]
+        else:
+            n_genes = n_top_genes
+        
+        # Find highly variable genes
+        try:
+            sc.pp.highly_variable_genes(
+                view_data,
+                n_top_genes=min(n_genes, view_data.n_vars),
+                subset=False  # Don't subset yet, just mark
+            )
+        except (ValueError, Exception) as e:
+            # Handle edge cases with small datasets or insufficient variance
+            warnings.warn(
+                f"Could not find highly variable genes for view '{view_name}': {str(e)}. "
+                f"Marking top {min(n_genes, view_data.n_vars)} genes as highly variable."
+            )
+            # Manually mark top genes as highly variable based on variance
+            if view_data.n_vars > 0:
+                X = view_data.X.toarray() if hasattr(view_data.X, 'toarray') else view_data.X
+                gene_vars = np.var(X, axis=0)
+                n_select = min(n_genes, view_data.n_vars)
+                top_indices = np.argsort(gene_vars)[::-1][:n_select]
+                
+                view_data.var['highly_variable'] = False
+                view_data.var.iloc[top_indices, view_data.var.columns.get_loc('highly_variable')] = True
+                view_data.var['means'] = np.mean(X, axis=0)
+                view_data.var['dispersions'] = gene_vars
+                view_data.var['dispersions_norm'] = gene_vars / np.mean(gene_vars) if np.mean(gene_vars) > 0 else gene_vars
+    
+    return mdata_hvg
+
+
+def subset_to_hvg(mdata: mu.MuData) -> mu.MuData:
+    """
+    Subset each view to highly variable genes.
+    
+    Parameters
+    ----------
+    mdata : mu.MuData
+        Muon data object with highly variable genes identified
+        
+    Returns
+    -------
+    mu.MuData
+        Muon data object subsetted to highly variable genes
+        
+    Examples
+    --------
+    >>> mdata_hvg = find_highly_variable_genes(mdata)
+    >>> mdata_subset = subset_to_hvg(mdata_hvg)
+    """
+    mdata_subset = mdata.copy()
+    
+    for view_name, view_data in mdata_subset.mod.items():
+        if 'highly_variable' in view_data.var.columns:
+            # Subset to highly variable genes
+            view_data = view_data[:, view_data.var.highly_variable].copy()
+            mdata_subset.mod[view_name] = view_data
+        else:
+            warnings.warn(
+                f"No highly variable genes found in view '{view_name}'. "
+                "Run find_highly_variable_genes() first."
+            )
+    
+    return mdata_subset
+
+
+def preprocess_for_muvi(
+    mdata: mu.MuData,
+    filter_cells: bool = True,
+    filter_genes: bool = True,
+    normalize: bool = True,
+    find_hvg: bool = True,
+    subset_hvg: bool = True,
+    **kwargs
+) -> mu.MuData:
+    """
+    Complete preprocessing pipeline for MuVI analysis.
+    
+    Parameters
+    ----------
+    mdata : mu.MuData
+        Raw muon data object
+    filter_cells : bool, default True
+        Whether to filter cells
+    filter_genes : bool, default True
+        Whether to filter genes
+    normalize : bool, default True
+        Whether to normalize data
+    find_hvg : bool, default True
+        Whether to find highly variable genes
+    subset_hvg : bool, default True
+        Whether to subset to highly variable genes
+    **kwargs
+        Additional arguments passed to individual preprocessing functions
+        
+    Returns
+    -------
+    mu.MuData
+        Preprocessed muon data object ready for MuVI analysis
+        
+    Examples
+    --------
+    >>> mdata_processed = preprocess_for_muvi(mdata_raw)
+    """
+    mdata_processed = mdata.copy()
+    
+    if filter_cells or filter_genes:
+        mdata_processed = filter_views(
+            mdata_processed,
+            **{k: v for k, v in kwargs.items() if k in [
+                'min_cells_per_gene', 'min_genes_per_cell', 'max_genes_per_cell',
+                'view_specific_filters'
+            ]}
+        )
+    
+    if normalize:
+        mdata_processed = normalize_views(mdata_processed)
+    
+    if find_hvg:
+        mdata_processed = find_highly_variable_genes(
+            mdata_processed,
+            **{k: v for k, v in kwargs.items() if k in [
+                'n_top_genes', 'view_specific_n_genes'
+            ]}
+        )
+    
+    if subset_hvg:
+        mdata_processed = subset_to_hvg(mdata_processed)
+    
+    return mdata_processed

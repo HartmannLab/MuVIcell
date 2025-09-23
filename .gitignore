@@ -205,3 +205,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+notebooks/top_features_multi_pT.csv
+notebooks/top_features_multi_pT.h5ad
