@@ -3,14 +3,16 @@ Synthetic data generation utilities for MuVIcell.
 
 This module provides functions for generating synthetic multi-view data
 in muon format for testing and demonstration purposes.
+
+All randomness is controlled by numpy.random.default_rng with a
+user-provided random_state.
 """
 
 import muon as mu
-import scanpy as sc
 import anndata as ad
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import warnings
 
 
@@ -20,38 +22,26 @@ def generate_synthetic_data(
     random_state: int = 42
 ) -> mu.MuData:
     """
-    Generate synthetic multi-view data in muon format.
+    Generate reproducible synthetic multi-view data in muon format.
     
     Parameters
     ----------
     n_samples : int, default 200
-        Number of samples to generate (each row represents a sample, not individual cells)
+        Number of samples to generate (each row = a sample, not individual cells).
     view_configs : Dict[str, Dict], optional
         Configuration for each view. If None, creates default 3 views
-        with 5, 10, and 15 features respectively
+        with 5, 10, and 15 features respectively.
     random_state : int, default 42
-        Random state for reproducibility
+        Random state for reproducibility.
         
     Returns
     -------
     mu.MuData
-        Synthetic muon data object with multiple views
-        
-    Examples
-    --------
-    >>> # Generate default synthetic data
-    >>> mdata = generate_synthetic_data(n_samples=300)
-    >>> 
-    >>> # Generate custom synthetic data
-    >>> configs = {
-    ...     'Fibroblasts': {'n_vars': 100, 'sparsity': 0.7},
-    ...     'Lymphocytes': {'n_vars': 50, 'sparsity': 0.3}
-    ... }
-    >>> mdata = generate_synthetic_data(n_samples=200, view_configs=configs)
+        Synthetic muon data object with multiple views.
     """
-    np.random.seed(random_state)
+    rng = np.random.default_rng(random_state)
     
-    # Default configuration if none provided
+    # Default config
     if view_configs is None:
         view_configs = {
             'Type1': {'n_vars': 5, 'sparsity': 0.3},
@@ -59,277 +49,155 @@ def generate_synthetic_data(
             'Type3': {'n_vars': 15, 'sparsity': 0.5}
         }
     
+    # Global obs
     obs_df = pd.DataFrame({
         'sample_id': [f'Sample_{i}' for i in range(n_samples)],
-        'batch': np.random.choice(['Batch1', 'Batch2'], size=n_samples),
-        'total_counts': np.random.lognormal(mean=8, sigma=0.5, size=n_samples)
-    })
-    obs_df.index = obs_df['sample_id']
+        'batch': rng.choice(['Batch1', 'Batch2'], size=n_samples),
+        'total_counts': rng.lognormal(mean=8, sigma=0.5, size=n_samples)
+    }, index=[f'Sample_{i}' for i in range(n_samples)])
     
-    # Generate views
     view_adatas = {}
-    
-    for view_name, config in view_configs.items():
+    for idx, (view_name, config) in enumerate(view_configs.items()):
         n_vars = config.get('n_vars', 10)
         sparsity = config.get('sparsity', 0.4)
         
-        # Generate synthetic expression data
+        # Use a deterministic per-view RNG
+        view_rng = np.random.default_rng(random_state + idx)
+        
         view_data = _generate_view_data(
             n_samples=n_samples,
             n_vars=n_vars,
             sparsity=sparsity,
-            random_state=random_state + hash(view_name) % 1000
+            rng=view_rng
         )
         
-        # Create var dataframe
         var_df = pd.DataFrame({
             'gene_id': [f'ft_{i}' for i in range(n_vars)],
             'gene_name': [f'{view_name}_Gene{i}' for i in range(n_vars)],
-            'highly_variable': np.random.choice([True, False], size=n_vars, p=[0.3, 0.7])
-        })
-        var_df.index = var_df['gene_id']
+            'highly_variable': rng.choice([True, False], size=n_vars, p=[0.3, 0.7])
+        }).set_index("gene_id")
         
-        # Create AnnData object
-        adata = ad.AnnData(
-            X=view_data,
-            obs=obs_df.copy(),
-            var=var_df
-        )
-        
+        adata = ad.AnnData(X=view_data, obs=obs_df.copy(), var=var_df)
         view_adatas[view_name] = adata
     
-    # Create MuData object
-    mdata = mu.MuData(view_adatas)
-    
-    return mdata
+    return mu.MuData(view_adatas)
 
+
+# -------------------------------------------------------------------------
+# Single-view generator
+# -------------------------------------------------------------------------
 
 def _generate_view_data(
     n_samples: int,
     n_vars: int,
     sparsity: float = 0.4,
-    random_state: int = 42
+    rng: Optional[np.random.Generator] = None
 ) -> np.ndarray:
     """
-    Generate synthetic expression data for a single view with realistic structure.
-    
-    Parameters
-    ----------
-    n_samples : int
-        Number of cells
-    n_vars : int
-        Number of variables/genes
-    sparsity : float, default 0.4
-        Fraction of zeros in the data
-    random_state : int, default 42
-        Random state for reproducibility
-        
-    Returns
-    -------
-    np.ndarray
-        Synthetic expression matrix (cells x genes)
+    Generate synthetic expression data for a single view.
     """
-    np.random.seed(random_state)
+    if rng is None:
+        rng = np.random.default_rng()
     
-    # Create base expression levels
-    base_expression = np.random.lognormal(mean=2, sigma=1, size=(n_samples, n_vars))
-    
-    # Add noise
-    noise = np.random.normal(0, 0.1, size=(n_samples, n_vars))
+    base_expression = rng.lognormal(mean=2, sigma=1, size=(n_samples, n_vars))
+    noise = rng.normal(0, 0.1, size=(n_samples, n_vars))
     expression_data = base_expression * np.exp(noise)
     
-    # Introduce sparsity
-    dropout_mask = np.random.binomial(1, sparsity, size=(n_samples, n_vars))
+    dropout_mask = rng.binomial(1, sparsity, size=(n_samples, n_vars))
     expression_data[dropout_mask.astype(bool)] = 0
     
-    # Ensure non-negative values
-    expression_data = np.maximum(expression_data, 0)
-    
-    return expression_data
+    return np.maximum(expression_data, 0)
+
 
 
 def add_latent_structure(
     mdata: mu.MuData,
     n_latent_factors: int = 5,
-    factor_variance: List[float] = None,
+    factor_variance: Optional[List[float]] = None,
     structure_strength: float = 1.0,
-    baseline_strength: float = 1.0
+    baseline_strength: float = 1.0,
+    random_state: int = 42
 ) -> mu.MuData:
     """
     Add realistic latent factor structure to synthetic data.
-    
-    Parameters
-    ----------
-    mdata : mu.MuData
-        Synthetic muon data object
-    n_latent_factors : int, default 5
-        Number of latent factors to simulate
-    factor_variance : List[float], optional
-        Variance explained by each factor. If None, uses decreasing variance
-    structure_strength : float, default 1.0
-        Scaling factor for the structured signal contribution (relative to baseline scale)
-    baseline_strength : float, default 1.0
-        Scaling factor for the baseline random expression
-        
-    Returns
-    -------
-    mu.MuData
-        Modified muon data object with latent structure
-        
-    Examples
-    --------
-    >>> # Default: structure dominates (structure ~3x stronger than baseline)
-    >>> mdata_structured = add_latent_structure(mdata, n_latent_factors=3)
-    >>> 
-    >>> # Equal contributions
-    >>> mdata_balanced = add_latent_structure(mdata, structure_strength=1.0, baseline_strength=1.0)
-    >>> 
-    >>> # Pure structure with minimal baseline noise
-    >>> mdata_clean = add_latent_structure(mdata, structure_strength=2.0, baseline_strength=0.1)
     """
-    if factor_variance is None:
-        # Decreasing variance explained
-        factor_variance = [0.3, 0.2, 0.15, 0.1, 0.05][:n_latent_factors]
+    rng = np.random.default_rng(random_state)
     
+    if factor_variance is None:
+        factor_variance = [0.3, 0.2, 0.15, 0.1, 0.05][:n_latent_factors]
     if len(factor_variance) != n_latent_factors:
         raise ValueError("Length of factor_variance must match n_latent_factors")
     
     n_samples = mdata.n_obs
+    latent_factors = rng.normal(0, 1, size=(n_samples, n_latent_factors))
     
-    # Generate latent factors (sample loadings)
-    latent_factors = np.random.normal(0, 1, size=(n_samples, n_latent_factors))
-    
-    # Add factor structure to each view
     mdata_structured = mdata.copy()
-    
-    # Store factor loadings for each view
     true_factor_loadings = {}
     
-    for view_name, view_data in mdata_structured.mod.items():
+    for vidx, (view_name, view_data) in enumerate(mdata_structured.mod.items()):
         n_vars = view_data.n_vars
+        factor_loadings = rng.normal(0, 1, size=(n_vars, n_latent_factors))
         
-        # Generate factor loadings (gene weights)
-        factor_loadings = np.random.normal(0, 1, size=(n_vars, n_latent_factors))
+        active_genes = rng.choice(n_vars, size=int(n_vars * 0.7), replace=False)
+        mask = np.zeros((n_vars, n_latent_factors), dtype=bool)
+        mask[active_genes, :] = True
+        factor_loadings[~mask] = 0
         
-        # Some genes are not associated with any factor
-        active_genes = np.random.choice(
-            n_vars, 
-            size=int(n_vars * 0.7),  # 70% of genes are active
-            replace=False
-        )
-        factor_mask = np.zeros((n_vars, n_latent_factors), dtype=bool)
-        factor_mask[active_genes, :] = True
-        factor_loadings[~factor_mask] = 0
+        for fidx, var in enumerate(factor_variance):
+            factor_loadings[:, fidx] *= np.sqrt(var)
         
-        # Apply factor variance scaling
-        for factor_idx, variance in enumerate(factor_variance):
-            factor_loadings[:, factor_idx] *= np.sqrt(variance)
-        
-        # Store the factor loadings for this view
         true_factor_loadings[view_name] = factor_loadings.copy()
         
-        # Generate structured expression
         structured_expression = latent_factors @ factor_loadings.T
+        current_expression = view_data.X.toarray() if hasattr(view_data.X, 'toarray') else view_data.X
+        baseline_scale = np.mean(current_expression, axis=0, keepdims=True)
         
-        # Get baseline expression and its scale
-        current_expression = (view_data.X.toarray() 
-                              if hasattr(view_data.X, 'toarray') 
-                              else view_data.X)
-        # Scale per gene (column-wise)
-        baseline_scale = np.mean(current_expression, axis=0, keepdims=True)  
-        # Shape: (1, n_vars)
-
-        # Scale structured expression to be comparable to baseline
-        structured_expression_scaled = structured_expression * baseline_scale
+        structured_scaled = structured_expression * baseline_scale
+        combined = baseline_strength * current_expression + structure_strength * structured_scaled
+        combined = np.maximum(combined, 0)
         
-        # Combine with proper scaling
-        combined_expression = (baseline_strength * current_expression + 
-                             structure_strength * structured_expression_scaled)
-        
-        # Ensure non-negative
-        combined_expression = np.maximum(combined_expression, 0)
-        
-        # Update the view data
-        mdata_structured.mod[view_name].X = combined_expression
-        
-        # Store factor loadings in view's varm (variable matrix)
+        mdata_structured.mod[view_name].X = combined
         mdata_structured.mod[view_name].varm['true_factor_loadings'] = factor_loadings
     
-    # Store true latent factors for evaluation
     mdata_structured.obsm['true_factors'] = latent_factors
     mdata_structured.uns['true_factor_variance'] = factor_variance
     mdata_structured.uns['true_factor_loadings'] = true_factor_loadings
     
-    # Add simulation weights per factor as obs columns 
-    # (for convenience/plotting)
-    for factor_idx in range(n_latent_factors):
-        factor_col_name = f'sim_factor_{factor_idx + 1}'
-        mdata_structured.obs[factor_col_name] = latent_factors[:, factor_idx]
+    for fidx in range(n_latent_factors):
+        mdata_structured.obs[f'sim_factor_{fidx+1}'] = latent_factors[:, fidx]
     
-    # Add shared metadata columns for easier access
-    # Extract from the first view (without prefixes)
     first_view = list(mdata_structured.mod.keys())[0]
-    first_view_obs = mdata_structured.mod[first_view].obs
-    
-    # Add shared metadata columns to the main obs
-    if 'batch' in first_view_obs.columns:
-        mdata_structured.obs['batch'] = first_view_obs['batch'].values
+    if 'batch' in mdata_structured.mod[first_view].obs.columns:
+        mdata_structured.obs['batch'] = mdata_structured.mod[first_view].obs['batch'].values
     
     return mdata_structured
+
 
 
 def generate_batch_effects(
     mdata: mu.MuData,
     batch_column: str = 'batch',
-    effect_strength: float = 0.2
+    effect_strength: float = 0.2,
+    random_state: int = 42
 ) -> mu.MuData:
     """
-    Add batch effects to synthetic data.
-    
-    Parameters
-    ----------
-    mdata : mu.MuData
-        Muon data object
-    batch_column : str, default 'batch'
-        Column name containing batch information
-    effect_strength : float, default 0.2
-        Strength of batch effects
-        
-    Returns
-    -------
-    mu.MuData
-        Muon data object with batch effects
-        
-    Examples
-    --------
-    >>> mdata = generate_synthetic_data()
-    >>> mdata_batch = generate_batch_effects(mdata, effect_strength=0.3)
+    Add reproducible batch effects to synthetic data.
     """
     if batch_column not in mdata.obs.columns:
         warnings.warn(f"Column '{batch_column}' not found. No batch effects added.")
         return mdata
     
+    rng = np.random.default_rng(random_state)
     mdata_batch = mdata.copy()
     batches = mdata.obs[batch_column].unique()
     
     for view_name, view_data in mdata_batch.mod.items():
         current_expression = view_data.X.toarray() if hasattr(view_data.X, 'toarray') else view_data.X
-        
         for batch in batches:
-            batch_mask = mdata.obs[batch_column] == batch
-            
-            # Generate batch-specific effects
-            batch_effects = np.random.normal(
-                0, effect_strength, 
-                size=(batch_mask.sum(), view_data.n_vars)
-            )
-            
-            # Apply multiplicative batch effects
-            current_expression[batch_mask, :] *= np.exp(batch_effects)
-        
-        # Ensure non-negative
-        current_expression = np.maximum(current_expression, 0)
-        mdata_batch.mod[view_name].X = current_expression
+            mask = mdata.obs[batch_column] == batch
+            batch_effects = rng.normal(0, effect_strength, size=(mask.sum(), view_data.n_vars))
+            current_expression[mask, :] *= np.exp(batch_effects)
+        mdata_batch.mod[view_name].X = np.maximum(current_expression, 0)
     
     return mdata_batch
 
@@ -337,47 +205,20 @@ def generate_batch_effects(
 def simulate_missing_data(
     mdata: mu.MuData,
     missing_rate: float = 0.1,
-    view_specific_rates: Optional[Dict[str, float]] = None
+    view_specific_rates: Optional[Dict[str, float]] = None,
+    random_state: int = 42
 ) -> mu.MuData:
     """
-    Simulate missing data in views.
-    
-    Parameters
-    ----------
-    mdata : mu.MuData
-        Muon data object
-    missing_rate : float, default 0.1
-        Global missing data rate
-    view_specific_rates : Dict[str, float], optional
-        View-specific missing rates
-        
-    Returns
-    -------
-    mu.MuData
-        Muon data object with missing data
-        
-    Examples
-    --------
-    >>> mdata = generate_synthetic_data()
-    >>> mdata_missing = simulate_missing_data(mdata, missing_rate=0.15)
+    Simulate reproducible missing data in views.
     """
+    rng = np.random.default_rng(random_state)
     mdata_missing = mdata.copy()
     
     for view_name, view_data in mdata_missing.mod.items():
-        # Get view-specific missing rate
-        if view_specific_rates and view_name in view_specific_rates:
-            rate = view_specific_rates[view_name]
-        else:
-            rate = missing_rate
-        
+        rate = view_specific_rates.get(view_name, missing_rate) if view_specific_rates else missing_rate
         current_expression = view_data.X.toarray() if hasattr(view_data.X, 'toarray') else view_data.X
-        
-        # Generate missing data mask
-        missing_mask = np.random.binomial(1, rate, size=current_expression.shape)
-        
-        # Set missing values to 0
+        missing_mask = rng.binomial(1, rate, size=current_expression.shape)
         current_expression[missing_mask.astype(bool)] = 0
-        
         mdata_missing.mod[view_name].X = current_expression
     
     return mdata_missing

@@ -6,60 +6,58 @@
 
 This document provides a comprehensive reference for the MuVIcell package API.
 
-### Data Module (`MuVIcell.data`)
+### Data Module (`muvicell.data`)
 
 #### Functions
 
 - `load_muon_data(path)` - Load muon data from file
 - `save_muon_data(mdata, path)` - Save muon data to file  
-- `get_view_info(mdata)` - Get information about views
-- `validate_muon_data(mdata)` - Validate data for MuVI analysis
 
-### Preprocessing Module (`MuVIcell.preprocessing`)
+### Preprocessing Module (`muvicell.preprocessing`)
 
 #### Functions
 
 - `normalize_views(mdata, ...)` - Normalize data in each view
 - `filter_views(mdata, ...)` - Filter cells and genes
 - `find_highly_variable_genes(mdata, ...)` - Find HVGs
+- `subset_to_hvg(mdata, ...)` - Subset to HVGs
 - `preprocess_for_muvi(mdata, ...)` - Complete preprocessing pipeline
 
-### MuVI Runner Module (`MuVIcell.muvi_runner`)
+### Analysis Module (`muvicell.analysis`)
 
 #### Functions
 
-- `setup_muvi_model(mdata, ...)` - Set up MuVI model
-- `run_muvi(mdata, ...)` - Run MuVI analysis
-- `get_factor_scores(mdata)` - Extract factor scores
-- `get_factor_loadings(mdata, view)` - Extract factor loadings
-- `select_top_factors(mdata, ...)` - Select top factors
-
-### Analysis Module (`MuVIcell.analysis`)
-
-#### Functions
-
-- `characterize_factors(mdata, ...)` - Characterize factors by genes
-- `calculate_factor_correlations(mdata)` - Calculate factor correlations
-- `identify_factor_associations(mdata, ...)` - Find factor-metadata associations
-- `cluster_cells_by_factors(mdata, ...)` - Cluster cells by factors
-- `summarize_factor_activity(mdata, ...)` - Summarize factor activity
+- `muvi_reconstruction_info(model, mdata, ...)` - Assess reconstruction performance
+- `muvi_variance_by_view_info(model, ...)` - Analyze variance explained
+- `muvi_featureclass_variance_info(model, mdata, ...)` - Variance by feature class
+- `muvi_variable_loadings_info(model, mdata, ...)` - Extract variable load
+- `muvi_selected_features_info(variable_loadings, ...)` - Get feature loadings
+- `muvi_factor_scores_info(model, mdata, ...)` - Get factor scores with metadata
+- `muvi_kruskal_info(scores_df, ...)` - Kruskal-Wallis test for categorical variables
+- `muvi_kendall_info(scores_df, ...)` - Kendall's tau for ordinal variables
+- `muvi_confidence_ellipses_info(scores_df, ...)` - Confidence for factor pairs
+- `muvi_top_features_by_view_info(variable_loadings, ...)` - Top features by view
+- `muvi_top_features_by_class_info(variable_loadings, ...)` - Top features by class
+- `muvi_build_selected_anndata(mdata, selection_df, ...)` - Export to AnnData
 
 ### Visualization Module (`MuVIcell.visualization`)
 
 #### Functions
 
-- `plot_variance_explained(mdata, ...)` - Plot variance explained
-- `plot_factor_scores(mdata, ...)` - Plot factor scores
-- `plot_factor_loadings(mdata, ...)` - Plot factor loadings
-- `plot_factor_heatmap(mdata, ...)` - Plot factor heatmap
-- `plot_factor_associations(mdata, ...)` - Plot factor associations
+- `muvi_reconstruction_plot(stats_df, ...)` - Plot reconstruction performance
+- `muvi_variance_by_view_plot(df, ...)` - Plot variance explained by view
+- `muvi_featureclass_variance_plot(df, ...)` - Plot variance by feature class
+- `muvi_plot_top_loadings_heatmap(variable_loadings, ...)` - Heatmap of top loadings
+- `muvi_selected_features_plot(df_long, ...)` - Plot selected feature loadings
+- `muvi_violin_plot(scores_df, ...)` - Violin plots of factor scores
+- `muvi_confidence_ellipses_plot(scores_df, ellipses_df, ...)` - Plot confidence
 
 ### Synthetic Module (`MuVIcell.synthetic`)
 
 #### Functions
 
 - `generate_synthetic_data(...)` - Generate synthetic multi-view data
-- `add_realistic_structure(mdata, ...)` - Add latent factor structure
+- `add_latent_structure(mdata, ...)` - Add latent factor structure
 - `generate_batch_effects(mdata, ...)` - Add batch effects
 - `simulate_missing_data(mdata, ...)` - Simulate missing data
 

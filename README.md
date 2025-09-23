@@ -204,13 +204,17 @@ This package builds upon and acknowledges:
 If you use MuVIcell in your research, please cite:
 
 ```bibtex
-@software{muvicell2024,
-  title={MuVIcell: Multi-view integration for sample-aggregated single-cell analysis},
-  author={HartmannLab},
-  year={2024},
-  url={https://github.com/HartmannLab/MuVIcell}
+@misc{https://doi.org/10.5281/zenodo.17008988,
+  doi = {10.5281/ZENODO.17008988},
+  url = {https://zenodo.org/doi/10.5281/zenodo.17008988},
+  author = {Loan Vulliard, Teresa Glauner, Sven Truxa, Miray Cetin, Yu-Le Wu, Ronald Simon, Laura Behm, Jovan Tanevski, Julio Saez-Rodriguez, Guido Sauter, Felix J. Hartmann},
+  title = {Robust multicellular programs dissect the complex tumor microenvironment and track disease progression in colorectal adenocarcinomas},
+  publisher = {Zenodo},
+  year = {2025},
+  copyright = {GNU General Public License v3.0 only}
 }
 ```
+
 
 ## License
 

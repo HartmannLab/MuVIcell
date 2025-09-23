@@ -1,6 +1,6 @@
 [project]
 name = "muvicell"
-version = "0.1.1"
+version = "0.1.2"
 description = "From cell-type stratified features to multicellular coordinated programs"
 readme = "README.md"
 authors = [

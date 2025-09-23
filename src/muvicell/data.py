@@ -11,45 +11,6 @@ from typing import Union, Dict, List, Optional
 import pandas as pd
 
 
-def load_muon_data(path: Union[str, Path]) -> mu.MuData:
-    """
-    Load muon data from file.
-    
-    Parameters
-    ----------
-    path : str or Path
-        Path to the muon data file (.h5mu format)
-        
-    Returns
-    -------
-    mu.MuData
-        Loaded muon data object
-        
-    Examples
-    --------
-    >>> mdata = load_muon_data("data.h5mu")
-    """
-    return mu.read_h5mu(path)
-
-
-def save_muon_data(mdata: mu.MuData, path: Union[str, Path]) -> None:
-    """
-    Save muon data to file.
-    
-    Parameters
-    ----------
-    mdata : mu.MuData
-        Muon data object to save
-    path : str or Path
-        Output path for the muon data file (.h5mu format)
-        
-    Examples
-    --------
-    >>> save_muon_data(mdata, "output.h5mu")
-    """
-    mdata.write_h5mu(path)
-
-
 def get_view_info(mdata: mu.MuData) -> pd.DataFrame:
     """
     Get information about views in the muon data object.

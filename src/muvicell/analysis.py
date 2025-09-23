@@ -272,8 +272,8 @@ def muvi_selected_features_info(variable_loadings: pd.DataFrame,
                                 selections: Sequence[Tuple[str, str]],
                                 verbosity: int = 1) -> pd.DataFrame:
     """
-    Get loadings for selected features.
-    
+    Get loadings for selected features, disambiguating duplicates across views.
+
     Parameters
     ----------
     variable_loadings : pd.DataFrame
@@ -282,31 +282,34 @@ def muvi_selected_features_info(variable_loadings: pd.DataFrame,
         List of (feature_name, view) pairs
     verbosity : int, default 1
         Level of output verbosity
-        
+
     Returns
     -------
     pd.DataFrame
-        Long DataFrame with columns [Variable, view, Factor, loading]
+        Long DataFrame with columns [Variable, view, Variable_view, Factor, loading]
     """
     base = variable_loadings.set_index(["variable", "view"])
-    # Collect rows present in selections
     chosen = []
     for ft, view in selections:
         if (ft, view) in base.index:
             row = base.loc[(ft, view)]
-            tmp = row.drop(labels=[], errors="ignore")
-            tmp_df = tmp.dropna().to_frame().T  # include all factor columns
-            tmp_df["variable"] = ft
+            tmp_df = row.dropna().to_frame().T
+            tmp_df["Variable"] = ft
             tmp_df["view"] = view
+            tmp_df["Variable_view"] = f"{ft}/{view}"
             chosen.append(tmp_df)
+
     if len(chosen) == 0:
-        out = pd.DataFrame(columns=["Variable", "view", "Factor", "loading"])
+        out = pd.DataFrame(columns=["Variable", "view", "Variable_view", "Factor", "loading"])
     else:
         wide = pd.concat(chosen, ignore_index=True)
-        # gather factors only
         factor_cols = [c for c in wide.columns if str(c).startswith("Factor ")]
-        out = wide.melt(id_vars=["variable", "view"], value_vars=factor_cols,
-                        var_name="Factor", value_name="loading").rename(columns={"variable": "Variable"})
+        out = wide.melt(
+            id_vars=["Variable", "view", "Variable_view"],
+            value_vars=factor_cols,
+            var_name="Factor",
+            value_name="loading"
+        )
     if verbosity:
         print(out.head().to_string(index=False))
     return out
@@ -597,44 +600,3 @@ def muvi_build_selected_anndata(mdata, selection_df: pd.DataFrame,
     ad.obs = mdata[obs_anchor_view].obs.copy()
     ad.var = selection_df.reset_index(drop=True).copy()
     return ad
-
-
-# Legacy function aliases for backward compatibility
-def identify_factor_associations(model, metadata_columns: Optional[List[str]] = None, 
-                                categorical_test: str = 'kruskal') -> pd.DataFrame:
-    """Legacy function - use muvi_kruskal_info or muvi_kendall_info instead."""
-    warnings.warn("identify_factor_associations is deprecated, use muvi_kruskal_info or muvi_kendall_info", 
-                  DeprecationWarning)
-    return pd.DataFrame()
-
-
-def characterize_factors(model, top_genes_per_factor: int = 10) -> Dict:
-    """Legacy function - use muvi_variable_loadings_info instead."""
-    warnings.warn("characterize_factors is deprecated, use muvi_variable_loadings_info", 
-                  DeprecationWarning)
-    return {}
-
-
-def cluster_cells_by_factors(model, factors_to_use: Optional[List[int]] = None) -> np.ndarray:
-    """Legacy function - use standard clustering on factor scores."""
-    warnings.warn("cluster_cells_by_factors is deprecated, use standard clustering on factor scores", 
-                  DeprecationWarning)
-    return np.array([])
-    
-    factor_scores = model.get_factor_scores()
-    
-    if factors_to_use is not None:
-        factor_scores = factor_scores[:, factors_to_use]
-    
-    if method == 'kmeans':
-        from sklearn.cluster import KMeans
-        clusterer = KMeans(n_clusters=n_clusters, random_state=42)
-        clusters = clusterer.fit_predict(factor_scores)
-    elif method == 'hierarchical':
-        from sklearn.cluster import AgglomerativeClustering
-        clusterer = AgglomerativeClustering(n_clusters=n_clusters)
-        clusters = clusterer.fit_predict(factor_scores)
-    else:
-        raise ValueError(f"Unknown clustering method: {method}")
-    
-    return clusters

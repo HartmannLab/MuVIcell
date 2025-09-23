@@ -11,7 +11,7 @@ from . import analysis
 from . import visualization
 from . import synthetic
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __author__ = "Loan Vulliard (@Hartmann Lab)"
 
 __all__ = [
