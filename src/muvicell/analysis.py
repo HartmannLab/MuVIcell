@@ -15,141 +15,6 @@ from sklearn.cluster import KMeans
 import warnings
 
 
-def characterize_factors(
-    model,
-    top_genes_per_factor: int = 50,
-    loading_threshold: float = 0.1
-) -> Dict[str, pd.DataFrame]:
-    """
-    Characterize factors by identifying top contributing genes per view.
-    
-    Parameters
-    ----------
-    model : MuVI model
-        Fitted MuVI model object
-    top_genes_per_factor : int, default 50
-        Number of top genes to extract per factor
-    loading_threshold : float, default 0.1
-        Minimum absolute loading threshold
-        
-    Returns
-    -------
-    Dict[str, pd.DataFrame]
-        Dictionary with top genes per view and factor
-        
-    Examples
-    --------
-    >>> factor_genes = characterize_factors(model, top_genes_per_factor=25)
-    >>> print(factor_genes['view1'].head())
-    """
-    # Handle both real MuVI model and mock model
-    if hasattr(model, 'get_factor_loadings'):
-        # Real MuVI model
-        loadings_dict = model.get_factor_loadings()
-        view_names = list(loadings_dict.keys())
-    else:
-        # Mock model - fall back to mdata access
-        mdata = model.mdata
-        loadings_dict = {}
-        view_names = list(mdata.mod.keys())
-        
-        for view_name in view_names:
-            if 'muvi_loadings' in mdata.mod[view_name].varm:
-                loadings_dict[view_name] = mdata.mod[view_name].varm['muvi_loadings']
-    
-    factor_characterization = {}
-    
-    for view_name in view_names:
-        if view_name not in loadings_dict:
-            continue
-            
-        loadings = loadings_dict[view_name]
-        
-        # Get gene names - try different approaches
-        try:
-            # For real MuVI model, get from original mdata
-            if hasattr(model, 'mdata_original'):
-                gene_names = model.mdata_original.mod[view_name].var_names
-            elif hasattr(model, 'mdata'):
-                gene_names = model.mdata.mod[view_name].var_names
-            else:
-                # Fallback: create generic gene names
-                gene_names = [f"{view_name}_gene_{i}" for i in range(loadings.shape[0])]
-        except:
-            gene_names = [f"{view_name}_gene_{i}" for i in range(loadings.shape[0])]
-        
-        n_factors = loadings.shape[1]
-        view_results = []
-        
-        for factor_idx in range(n_factors):
-            factor_loadings = loadings[:, factor_idx]
-            
-            # Get genes above threshold
-            significant_mask = np.abs(factor_loadings) >= loading_threshold
-            if not np.any(significant_mask):
-                continue
-            
-            # Sort by absolute loading value
-            sorted_indices = np.argsort(np.abs(factor_loadings[significant_mask]))[::-1]
-            top_indices = np.where(significant_mask)[0][sorted_indices[:top_genes_per_factor]]
-            
-            for idx in top_indices:
-                view_results.append({
-                    'factor': factor_idx,
-                    'gene': gene_names[idx],
-                    'loading': factor_loadings[idx],
-                    'abs_loading': np.abs(factor_loadings[idx])
-                })
-        
-        factor_characterization[view_name] = pd.DataFrame(view_results)
-    
-    return factor_characterization
-
-
-def calculate_factor_correlations(model) -> pd.DataFrame:
-    """
-    Calculate correlations between factors.
-    
-    Parameters
-    ----------
-    model : MuVI model
-        Fitted MuVI model object
-        
-    Returns
-    -------
-    pd.DataFrame
-        Factor correlation matrix
-        
-    Examples
-    --------
-    >>> factor_corr = calculate_factor_correlations(model)
-    >>> print(factor_corr)
-    """
-    # Get factor scores from model
-    if hasattr(model, 'get_factor_scores'):
-        # Real MuVI model
-        factor_scores = model.get_factor_scores()
-    else:
-        # Mock model - fall back to mdata access
-        mdata = model.mdata
-        factor_scores = mdata.obsm['X_muvi']
-    
-    # Calculate correlation matrix
-    factor_corr = np.corrcoef(factor_scores.T)
-    
-    # Create DataFrame with proper factor names
-    n_factors = factor_scores.shape[1]
-    factor_names = [f'Factor_{i}' for i in range(n_factors)]
-    
-    corr_df = pd.DataFrame(
-        factor_corr,
-        index=factor_names,
-        columns=factor_names
-    )
-    
-    return corr_df
-
-
 def identify_factor_associations(
     model,
     metadata_columns: Optional[List[str]] = None,
@@ -180,23 +45,11 @@ def identify_factor_associations(
     >>> associations = identify_factor_associations(model)
     >>> significant = associations[associations['p_value'] < 0.05]
     """
-    # Get factor scores and metadata
-    if hasattr(model, 'get_factor_scores'):
-        # Real MuVI model
-        factor_scores = model.get_factor_scores()
-        # Need to get metadata from original mdata
-        if hasattr(model, 'mdata_original'):
-            obs_df = model.mdata_original.obs
-        else:
-            # Create dummy metadata for testing
-            obs_df = pd.DataFrame({
-                'cell_type': ['TypeA'] * factor_scores.shape[0],
-                'condition': ['Control'] * factor_scores.shape[0]
-            })
-    else:
-        # Mock model
-        mdata = model.mdata
-        factor_scores = mdata.obsm['X_muvi']
+    assert hasattr(model, 'get_factor_scores'), "Model must have get_factor_scores method"
+    assert hasattr(model, 'mdata_original'), "Model must have mdata_original attribute"
+    
+    factor_scores = model.get_factor_scores()
+    obs_df = model.mdata_original.obs
     
     if metadata_columns is None:
         metadata_columns = list(obs_df.columns)
@@ -309,14 +162,9 @@ def cluster_cells_by_factors(
     >>> clusters = cluster_cells_by_factors(model, n_clusters=4)
     >>> print(f"Cluster distribution: {np.bincount(clusters)}")
     """
-    # Get factor scores
-    if hasattr(model, 'get_factor_scores'):
-        # Real MuVI model
-        factor_scores = model.get_factor_scores()
-    else:
-        # Mock model
-        mdata = model.mdata
-        factor_scores = mdata.obsm['X_muvi']
+    assert hasattr(model, 'get_factor_scores'), "Model must have get_factor_scores method"
+    
+    factor_scores = model.get_factor_scores()
     
     if factors_to_use is not None:
         factor_scores = factor_scores[:, factors_to_use]
@@ -333,111 +181,3 @@ def cluster_cells_by_factors(
         raise ValueError(f"Unknown clustering method: {method}")
     
     return clusters
-
-
-def calculate_factor_distances(
-    mdata_or_model,
-    metric: str = 'euclidean'
-) -> np.ndarray:
-    """
-    Calculate pairwise distances between cells in factor space.
-    
-    Parameters
-    ----------
-    mdata_or_model : mu.MuData or MuVI model
-        Muon data object with MuVI results or fitted MuVI model
-    metric : str, default 'euclidean'
-        Distance metric ('euclidean', 'cosine', 'manhattan')
-        
-    Returns
-    -------
-    np.ndarray
-        Pairwise distance matrix
-        
-    Examples
-    --------
-    >>> distances = calculate_factor_distances(model, metric='cosine')
-    """
-    # Handle both mdata and model objects
-    if hasattr(mdata_or_model, 'mdata'):
-        mdata = mdata_or_model.mdata
-    else:
-        mdata = mdata_or_model
-        
-    factor_scores = mdata.obsm['X_muvi']
-    distance_matrix = pairwise_distances(factor_scores, metric=metric)
-    
-    return distance_matrix
-
-
-def summarize_factor_activity(
-    mdata_or_model,
-    group_by: Optional[str] = None
-) -> pd.DataFrame:
-    """
-    Summarize factor activity across cell groups.
-    
-    Parameters
-    ----------
-    mdata_or_model : mu.MuData or MuVI model
-        Muon data object with MuVI results or MuVI model object
-    group_by : str, optional
-        Column in mdata.obs to group cells by
-        
-    Returns
-    -------
-    pd.DataFrame
-        Summary of factor activity per group
-        
-    Examples
-    --------
-    >>> summary = summarize_factor_activity(mdata_muvi, group_by='cell_type')
-    >>> print(summary)
-    """
-    # Handle both mdata and model objects
-    if hasattr(mdata_or_model, 'get_factor_scores'):
-        # MuVI model object
-        factor_scores = mdata_or_model.get_factor_scores()
-        mdata = mdata_or_model.mdata_original
-    else:
-        # MuData object
-        factor_scores = mdata_or_model.obsm['X_muvi']
-        mdata = mdata_or_model
-    
-    n_factors = factor_scores.shape[1]
-    factor_names = [f'Factor_{i}' for i in range(n_factors)]
-    
-    if group_by is None:
-        # Overall summary
-        summary_data = {
-            'factor': factor_names,
-            'mean_activity': np.mean(factor_scores, axis=0),
-            'std_activity': np.std(factor_scores, axis=0),
-            'min_activity': np.min(factor_scores, axis=0),
-            'max_activity': np.max(factor_scores, axis=0)
-        }
-        return pd.DataFrame(summary_data)
-    else:
-        # Group-wise summary
-        if group_by not in mdata.obs.columns:
-            raise ValueError(f"Column '{group_by}' not found in mdata.obs")
-        
-        groups = mdata.obs[group_by].unique()
-        summary_rows = []
-        
-        for group in groups:
-            if pd.isna(group):
-                continue
-            group_mask = mdata.obs[group_by] == group
-            group_scores = factor_scores[group_mask, :]
-            
-            for factor_idx, factor_name in enumerate(factor_names):
-                summary_rows.append({
-                    'group': group,
-                    'factor': factor_name,
-                    'mean_activity': np.mean(group_scores[:, factor_idx]),
-                    'std_activity': np.std(group_scores[:, factor_idx]),
-                    'n_cells': group_mask.sum()
-                })
-        
-        return pd.DataFrame(summary_rows)

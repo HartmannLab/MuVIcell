@@ -17,7 +17,6 @@ import warnings
 def generate_synthetic_data(
     n_samples: int = 200,
     view_configs: Optional[Dict[str, Dict]] = None,
-    n_true_factors: int = 3,
     random_state: int = 42
 ) -> mu.MuData:
     """
@@ -30,8 +29,6 @@ def generate_synthetic_data(
     view_configs : Dict[str, Dict], optional
         Configuration for each view. If None, creates default 3 views
         with 5, 10, and 15 features respectively
-    n_true_factors : int, default 3
-        Number of true latent factors to simulate (should match MuVI n_factors)
     random_state : int, default 42
         Random state for reproducibility
         
@@ -47,8 +44,8 @@ def generate_synthetic_data(
     >>> 
     >>> # Generate custom synthetic data
     >>> configs = {
-    ...     'rna': {'n_vars': 100, 'sparsity': 0.7},
-    ...     'protein': {'n_vars': 50, 'sparsity': 0.3}
+    ...     'Fibroblasts': {'n_vars': 100, 'sparsity': 0.7},
+    ...     'Lymphocytes': {'n_vars': 50, 'sparsity': 0.3}
     ... }
     >>> mdata = generate_synthetic_data(n_samples=200, view_configs=configs)
     """
@@ -57,19 +54,13 @@ def generate_synthetic_data(
     # Default configuration if none provided
     if view_configs is None:
         view_configs = {
-            'view1': {'n_vars': 5, 'sparsity': 0.3},
-            'view2': {'n_vars': 10, 'sparsity': 0.4}, 
-            'view3': {'n_vars': 15, 'sparsity': 0.5}
+            'Type1': {'n_vars': 5, 'sparsity': 0.3},
+            'Type2': {'n_vars': 10, 'sparsity': 0.4}, 
+            'Type3': {'n_vars': 15, 'sparsity': 0.5}
         }
-    
-    # Generate shared sample metadata
-    cell_types = np.random.choice(['TypeA', 'TypeB', 'TypeC'], size=n_samples, p=[0.4, 0.35, 0.25])
-    conditions = np.random.choice(['Control', 'Treatment'], size=n_samples, p=[0.6, 0.4])
     
     obs_df = pd.DataFrame({
         'sample_id': [f'Sample_{i}' for i in range(n_samples)],
-        'cell_type': cell_types,
-        'condition': conditions,
         'batch': np.random.choice(['Batch1', 'Batch2'], size=n_samples),
         'total_counts': np.random.lognormal(mean=8, sigma=0.5, size=n_samples)
     })
@@ -86,8 +77,6 @@ def generate_synthetic_data(
         view_data = _generate_view_data(
             n_samples=n_samples,
             n_vars=n_vars,
-            cell_types=cell_types,
-            conditions=conditions,
             sparsity=sparsity,
             random_state=random_state + hash(view_name) % 1000
         )
@@ -118,8 +107,6 @@ def generate_synthetic_data(
 def _generate_view_data(
     n_samples: int,
     n_vars: int,
-    cell_types: np.ndarray,
-    conditions: np.ndarray,
     sparsity: float = 0.4,
     random_state: int = 42
 ) -> np.ndarray:
@@ -132,10 +119,6 @@ def _generate_view_data(
         Number of cells
     n_vars : int
         Number of variables/genes
-    cell_types : np.ndarray
-        Cell type labels
-    conditions : np.ndarray
-        Condition labels
     sparsity : float, default 0.4
         Fraction of zeros in the data
     random_state : int, default 42
@@ -150,33 +133,6 @@ def _generate_view_data(
     
     # Create base expression levels
     base_expression = np.random.lognormal(mean=2, sigma=1, size=(n_samples, n_vars))
-    
-    # Add cell type effects
-    unique_cell_types = np.unique(cell_types)
-    for i, cell_type in enumerate(unique_cell_types):
-        cell_mask = cell_types == cell_type
-        
-        # Some genes are differentially expressed in this cell type
-        de_genes = np.random.choice(n_vars, size=max(1, n_vars // 4), replace=False)
-        effect_size = np.random.normal(0, 0.5, size=len(de_genes))
-        
-        for j, gene_idx in enumerate(de_genes):
-            base_expression[cell_mask, gene_idx] *= np.exp(effect_size[j])
-    
-    # Add condition effects
-    unique_conditions = np.unique(conditions)
-    for i, condition in enumerate(unique_conditions):
-        if condition == 'Control':
-            continue  # No effect for control
-        
-        condition_mask = conditions == condition
-        
-        # Some genes are differentially expressed in this condition
-        de_genes = np.random.choice(n_vars, size=max(1, n_vars // 6), replace=False)
-        effect_size = np.random.normal(0, 0.3, size=len(de_genes))
-        
-        for j, gene_idx in enumerate(de_genes):
-            base_expression[condition_mask, gene_idx] *= np.exp(effect_size[j])
     
     # Add noise
     noise = np.random.normal(0, 0.1, size=(n_samples, n_vars))
@@ -195,7 +151,9 @@ def _generate_view_data(
 def add_latent_structure(
     mdata: mu.MuData,
     n_latent_factors: int = 5,
-    factor_variance: List[float] = None
+    factor_variance: List[float] = None,
+    structure_strength: float = 1.0,
+    baseline_strength: float = 1.0
 ) -> mu.MuData:
     """
     Add realistic latent factor structure to synthetic data.
@@ -208,6 +166,10 @@ def add_latent_structure(
         Number of latent factors to simulate
     factor_variance : List[float], optional
         Variance explained by each factor. If None, uses decreasing variance
+    structure_strength : float, default 1.0
+        Scaling factor for the structured signal contribution (relative to baseline scale)
+    baseline_strength : float, default 1.0
+        Scaling factor for the baseline random expression
         
     Returns
     -------
@@ -216,8 +178,14 @@ def add_latent_structure(
         
     Examples
     --------
-    >>> mdata = generate_synthetic_data()
-    >>> mdata_structured = add_realistic_structure(mdata, n_latent_factors=3)
+    >>> # Default: structure dominates (structure ~3x stronger than baseline)
+    >>> mdata_structured = add_latent_structure(mdata, n_latent_factors=3)
+    >>> 
+    >>> # Equal contributions
+    >>> mdata_balanced = add_latent_structure(mdata, structure_strength=1.0, baseline_strength=1.0)
+    >>> 
+    >>> # Pure structure with minimal baseline noise
+    >>> mdata_clean = add_latent_structure(mdata, structure_strength=2.0, baseline_strength=0.1)
     """
     if factor_variance is None:
         # Decreasing variance explained
@@ -228,11 +196,14 @@ def add_latent_structure(
     
     n_samples = mdata.n_obs
     
-    # Generate latent factors (cell loadings)
+    # Generate latent factors (sample loadings)
     latent_factors = np.random.normal(0, 1, size=(n_samples, n_latent_factors))
     
     # Add factor structure to each view
     mdata_structured = mdata.copy()
+    
+    # Store factor loadings for each view
+    true_factor_loadings = {}
     
     for view_name, view_data in mdata_structured.mod.items():
         n_vars = view_data.n_vars
@@ -254,22 +225,46 @@ def add_latent_structure(
         for factor_idx, variance in enumerate(factor_variance):
             factor_loadings[:, factor_idx] *= np.sqrt(variance)
         
+        # Store the factor loadings for this view
+        true_factor_loadings[view_name] = factor_loadings.copy()
+        
         # Generate structured expression
         structured_expression = latent_factors @ factor_loadings.T
         
-        # Add to existing expression (scaled down to avoid overwhelming signal)
-        current_expression = view_data.X.toarray() if hasattr(view_data.X, 'toarray') else view_data.X
-        combined_expression = current_expression + 0.5 * structured_expression
+        # Get baseline expression and its scale
+        current_expression = (view_data.X.toarray() 
+                              if hasattr(view_data.X, 'toarray') 
+                              else view_data.X)
+        # Scale per gene (column-wise)
+        baseline_scale = np.mean(current_expression, axis=0, keepdims=True)  
+        # Shape: (1, n_vars)
+
+        # Scale structured expression to be comparable to baseline
+        structured_expression_scaled = structured_expression * baseline_scale
+        
+        # Combine with proper scaling
+        combined_expression = (baseline_strength * current_expression + 
+                             structure_strength * structured_expression_scaled)
         
         # Ensure non-negative
         combined_expression = np.maximum(combined_expression, 0)
         
         # Update the view data
         mdata_structured.mod[view_name].X = combined_expression
+        
+        # Store factor loadings in view's varm (variable matrix)
+        mdata_structured.mod[view_name].varm['true_factor_loadings'] = factor_loadings
     
     # Store true latent factors for evaluation
     mdata_structured.obsm['true_factors'] = latent_factors
     mdata_structured.uns['true_factor_variance'] = factor_variance
+    mdata_structured.uns['true_factor_loadings'] = true_factor_loadings
+    
+    # Add simulation weights per factor as obs columns 
+    # (for convenience/plotting)
+    for factor_idx in range(n_latent_factors):
+        factor_col_name = f'sim_factor_{factor_idx + 1}'
+        mdata_structured.obs[factor_col_name] = latent_factors[:, factor_idx]
     
     # Add shared metadata columns for easier access
     # Extract from the first view (without prefixes)
@@ -277,10 +272,6 @@ def add_latent_structure(
     first_view_obs = mdata_structured.mod[first_view].obs
     
     # Add shared metadata columns to the main obs
-    if 'cell_type' in first_view_obs.columns:
-        mdata_structured.obs['cell_type'] = first_view_obs['cell_type'].values
-    if 'condition' in first_view_obs.columns:
-        mdata_structured.obs['condition'] = first_view_obs['condition'].values
     if 'batch' in first_view_obs.columns:
         mdata_structured.obs['batch'] = first_view_obs['batch'].values
     

@@ -8,29 +8,23 @@ before MuVI analysis, including normalization and filtering.
 import muon as mu
 import scanpy as sc
 import numpy as np
-from typing import Optional, Dict, List, Union
+from typing import Optional, Dict
 import warnings
 
 
 def normalize_views(
-    mdata: mu.MuData,
-    view_configs: Optional[Dict[str, Dict]] = None,
-    log_transform: bool = True,
-    scale: bool = True
+    mdata: mu.MuData
 ) -> mu.MuData:
     """
     Normalize data in each view of the muon object.
+    
+    Centers and scales each feature (column) by subtracting the mean 
+    and dividing by the standard deviation, ignoring NA values.
     
     Parameters
     ----------
     mdata : mu.MuData
         Muon data object with multiple views
-    view_configs : Dict[str, Dict], optional
-        View-specific normalization configurations
-    log_transform : bool, default True
-        Whether to apply log transformation
-    scale : bool, default True  
-        Whether to scale data to unit variance
         
     Returns
     -------
@@ -40,35 +34,15 @@ def normalize_views(
     Examples
     --------
     >>> mdata_norm = normalize_views(mdata)
-    >>> # With custom configurations
-    >>> configs = {'rna': {'log_transform': True}, 'protein': {'log_transform': False}}
-    >>> mdata_norm = normalize_views(mdata, view_configs=configs)
     """
     mdata_norm = mdata.copy()
     
     for view_name, view_data in mdata_norm.mod.items():
-        # Get view-specific config or use defaults
-        if view_configs and view_name in view_configs:
-            config = view_configs[view_name]
-            view_log = config.get('log_transform', log_transform)
-            view_scale = config.get('scale', scale)
-        else:
-            view_log = log_transform
-            view_scale = scale
+        print(f"Modality name: {view_name}")
         
-        # Store raw data
-        view_data.raw = view_data
-        
-        # Normalize total counts per cell
-        sc.pp.normalize_total(view_data, target_sum=1e4)
-        
-        # Log transform if specified
-        if view_log:
-            sc.pp.log1p(view_data)
-        
-        # Scale to unit variance if specified
-        if view_scale:
-            sc.pp.scale(view_data, max_value=10)
+        # Center and scale each column of the data, ignoring NA values
+        view_data.X = view_data.X - np.nanmean(view_data.X, axis=0, keepdims=True)
+        view_data.X = view_data.X / np.nanstd(view_data.X, axis=0)
     
     return mdata_norm
 
@@ -279,12 +253,7 @@ def preprocess_for_muvi(
         )
     
     if normalize:
-        mdata_processed = normalize_views(
-            mdata_processed,
-            **{k: v for k, v in kwargs.items() if k in [
-                'view_configs', 'log_transform', 'scale'
-            ]}
-        )
+        mdata_processed = normalize_views(mdata_processed)
     
     if find_hvg:
         mdata_processed = find_highly_variable_genes(
