@@ -4,7 +4,7 @@ version = "0.1.1"
 description = "From cell-type stratified features to multicellular coordinated programs"
 readme = "README.md"
 authors = [
-    { name = "HartmannLab", email = "info@hartmannlab.org" }
+    { name = "Loan Vulliard (@Hartmann Lab)", email = "loan.vulliard@dkfz-heidelberg.de" }
 ]
 requires-python = ">=3.10"
 dependencies = [
@@ -20,7 +20,7 @@ dependencies = [
     "statsmodels",
     "torch>=2.6.0",
     "tensordict>=0.6.2",
-    "muvi"
+    "muvi>=0.1.4",
 ]
 
 [project.optional-dependencies]
@@ -35,3 +35,8 @@ dev = [
 [build-system]
 requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.uv]
+override-dependencies = [
+  "tensordict>=0.6.2,<0.8",
+]

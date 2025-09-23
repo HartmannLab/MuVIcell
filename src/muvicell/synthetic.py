@@ -83,7 +83,7 @@ def generate_synthetic_data(
         
         # Create var dataframe
         var_df = pd.DataFrame({
-            'gene_id': [f'{view_name}_gene_{i}' for i in range(n_vars)],
+            'gene_id': [f'ft_{i}' for i in range(n_vars)],
             'gene_name': [f'{view_name}_Gene{i}' for i in range(n_vars)],
             'highly_variable': np.random.choice([True, False], size=n_vars, p=[0.3, 0.7])
         })
