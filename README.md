@@ -1,6 +1,8 @@
 # MuVIcell
 **From cell-type stratified features to multicellular coordinated programs**
 
+[![DOI](https://zenodo.org/badge/1060213785.svg)](https://doi.org/10.5281/zenodo.17186801)
+
 MuVIcell is a comprehensive Python package for multi-view integration and analysis of sample-aggregated single-cell data using MuVI (Multi-View Integration). The package enables researchers to identify latent factors that capture coordinated programs across different molecular layers (e.g., RNA, protein, chromatin accessibility) in multicellular systems.
 
 ## Overview
