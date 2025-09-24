@@ -19,8 +19,8 @@ dependencies = [
     "jupyter",
     "statsmodels",
     "torch>=2.6.0",
-    "tensordict>=0.6.2",
-    "muvi>=0.1.4",
+    "muvi @ git+https://github.com/MLO-lab/MuVI.git@master",
+    "tensordict",
 ]
 
 [project.optional-dependencies]
@@ -38,5 +38,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.uv]
 override-dependencies = [
+  "muvi>=0.1.4; python_version < '3.11'",
+  "muvi @ git+https://github.com/MLO-lab/MuVI.git@master; python_version >= '3.11'",
   "tensordict>=0.6.2,<0.8",
 ]

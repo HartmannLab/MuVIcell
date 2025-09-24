@@ -29,20 +29,23 @@ MuVIcell provides a streamlined workflow for analyzing multi-modal datasets wher
 
 ### Installation Steps
 
-**For full functionality (recommended):**
+**With uv (recommend):**
 ```bash
-conda create -n muvicell python=3.10
-conda activate muvicell
-git clone https://github.com/HartmannLab/MuVIcell.git
-cd MuVIcell
-pip install -e .
+uv sync
 ```
 
-**Development installation:**
+**With conda:**
+```bash
+conda create -n muvicell python=3.11
+conda activate muvicell
+git clone https://github.com/HartmannLab/MuVIcell.git
+pip install -e MuVIcell
+```
+
+**With pip (global or venv, not recommended):**
 ```bash
 git clone https://github.com/HartmannLab/MuVIcell.git
-cd MuVIcell
-pip install -e .
+pip install -e MuVIcell
 ```
 
 ## Quick Start
