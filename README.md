@@ -210,7 +210,6 @@ This package builds upon and acknowledges:
 ## Citation
 
 If you use MuVIcell in your research, please cite our preprint: https://arxiv.org/abs/2510.05083
-```
 
 ## License
 
