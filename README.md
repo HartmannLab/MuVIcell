@@ -141,6 +141,9 @@ The package includes a comprehensive tutorial notebook (`notebooks/MuVIcell_Tuto
 For an example of the workflow applied to real data, see the original MOFACell analysis:
 [MIBI Analysis Hamburg CRC TMA 2024](https://github.com/HartmannLab/MIBI-Analysis_Hamburg_CRC_TMA_2024/blob/main/notebooks/multicellular/MOFACell.ipynb)
 
+### Starting from cell-level measurements
+The examplke notebook starts from a `muon` object (multiview `anndata`). If you start your analysis from cell-level measurements in a tabular format, you will need to aggregate (e.g. pseudobulk) data per cell type. An example can be found here: https://github.com/HartmannLab/MIBI-Analysis_Hamburg_CRC_TMA_2024/blob/main/notebooks/multicellular/PrepareMuData.ipynb
+
 ## API Reference
 
 ### Core Analysis Functions
@@ -206,20 +209,8 @@ This package builds upon and acknowledges:
 
 ## Citation
 
-If you use MuVIcell in your research, please cite:
-
-```bibtex
-@misc{https://doi.org/10.5281/zenodo.17008988,
-  doi = {10.5281/ZENODO.17008988},
-  url = {https://zenodo.org/doi/10.5281/zenodo.17008988},
-  author = {Loan Vulliard, Teresa Glauner, Sven Truxa, Miray Cetin, Yu-Le Wu, Ronald Simon, Laura Behm, Jovan Tanevski, Julio Saez-Rodriguez, Guido Sauter, Felix J. Hartmann},
-  title = {Robust multicellular programs dissect the complex tumor microenvironment and track disease progression in colorectal adenocarcinomas},
-  publisher = {Zenodo},
-  year = {2025},
-  copyright = {GNU General Public License v3.0 only}
-}
+If you use MuVIcell in your research, please cite our preprint: https://arxiv.org/abs/2510.05083
 ```
-
 
 ## License
 
