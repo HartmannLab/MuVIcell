@@ -14,8 +14,6 @@ MuVIcell provides a streamlined workflow for analyzing multi-modal datasets wher
 
 ## Key Features
 
-- **Complete MuVI Integration**: Uses the exact same API as the original MOFACell analysis
-- **Synthetic Data Generation**: Create realistic multi-view datasets for testing and development
 - **Comprehensive Analysis**: Factor characterization, variance analysis, and statistical testing
 - **Rich Visualizations**: Publication-ready plots using plotnine
 - **Robust Testing**: Extensive test suite ensuring reliability
@@ -138,7 +136,7 @@ The package includes a comprehensive tutorial notebook (`notebooks/MuVIcell_Tuto
 - Best practices for real data analysis
 
 ### Real Data Analysis Example
-For an example of the workflow applied to real data, see the original MOFACell analysis:
+For an example of the workflow applied to real data, see the original analysis in colorectal cancers:
 [MIBI Analysis Hamburg CRC TMA 2024](https://github.com/HartmannLab/MIBI-Analysis_Hamburg_CRC_TMA_2024/blob/main/notebooks/multicellular/MOFACell.ipynb)
 
 ### Starting from cell-level measurements
