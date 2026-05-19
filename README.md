@@ -55,13 +55,11 @@ Installation with uv is the fastest option and will complete in seconds on most 
 
 ```python
 import muvi
-import muvi.tl
 from muvicell import synthetic, preprocessing, analysis, visualization
 
 # 1. Generate synthetic multi-view data
 mdata = synthetic.generate_synthetic_data(
     n_samples=200,
-    n_true_factors=3,
     view_configs={
         'view1': {'n_vars': 5, 'sparsity': 0.3},
         'view2': {'n_vars': 10, 'sparsity': 0.4},
@@ -73,7 +71,9 @@ mdata = synthetic.generate_synthetic_data(
 mdata_structured = synthetic.add_latent_structure(mdata, n_latent_factors=3)
 
 # 3. Preprocess for MuVI analysis
-mdata_processed = preprocessing.preprocess_for_muvi(mdata_structured)
+mdata_processed = preprocessing.preprocess_for_muvi(mdata_structured,
+                                                    filter_cells=False,
+                                                    filter_genes=False)
 
 # 4. Run MuVI using exact same API as original analysis
 model = muvi.tl.from_mdata(mdata_processed, n_factors=3, nmf=False)
@@ -82,13 +82,13 @@ model.fit()
 # 5. Analyze results
 reconstruction_stats = analysis.muvi_reconstruction_info(model, mdata_processed)
 variance_df = analysis.muvi_variance_by_view_info(model)
-factor_scores = analysis.muvi_factor_scores_info(model, mdata_processed, obs_keys=['cell_type', 'condition'])
+factor_scores = analysis.muvi_factor_scores_info(model, mdata_processed, obs_keys=['batch'])
 
 # 6. Create visualizations
 p1 = visualization.muvi_variance_by_view_plot(variance_df)
 p1.show()
 
-p2 = visualization.muvi_violin_plot(factor_scores, "Factor 1", "cell_type")
+p2 = visualization.muvi_violin_plot(factor_scores, "Factor 1", "batch")
 p2.show()
 ```
 
