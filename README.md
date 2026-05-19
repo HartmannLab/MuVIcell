@@ -46,6 +46,9 @@ git clone https://github.com/HartmannLab/MuVIcell.git
 pip install -e MuVIcell
 ```
 
+### Runtime
+Installation with uv is the fastest option and will complete in seconds on most machines. Running MuVI for factor decomposition might take up to few minutes, and all MuVIcell features should not take more than seconds on modern devices.
+
 ## Quick Start
 
 ### Basic Workflow
